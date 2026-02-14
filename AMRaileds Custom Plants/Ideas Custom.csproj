@@ -1,0 +1,204 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <RootNamespace>Ideas_Custom</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="AssetBundles\bladestar" />
+    <None Remove="AssetBundles\bowling" />
+    <None Remove="AssetBundles\clusterdoom" />
+    <None Remove="AssetBundles\dawning_shroom" />
+    <None Remove="AssetBundles\doomflower" />
+    <None Remove="AssetBundles\doomnutblover" />
+    <None Remove="AssetBundles\empaperzombie" />
+    <None Remove="AssetBundles\eventishroom" />
+    <None Remove="AssetBundles\explodonut" />
+    <None Remove="AssetBundles\fireclawzombie" />
+    <None Remove="AssetBundles\fireflower" />
+    <None Remove="AssetBundles\firepeashooter" />
+    <None Remove="AssetBundles\frenzerg" />
+    <None Remove="AssetBundles\frostumbrella" />
+    <None Remove="AssetBundles\fumeumbrella" />
+    <None Remove="AssetBundles\garlicboom" />
+    <None Remove="AssetBundles\garpuff" />
+    <None Remove="AssetBundles\goldengatling" />
+    <None Remove="AssetBundles\goldentycoongatling" />
+    <None Remove="AssetBundles\hybridmelon" />
+    <None Remove="AssetBundles\hypnopaperzombie" />
+    <None Remove="AssetBundles\icechomper" />
+    <None Remove="AssetBundles\icedoomultistar" />
+    <None Remove="AssetBundles\iceflower" />
+    <None Remove="AssetBundles\jalachomper" />
+    <None Remove="AssetBundles\jalahypno" />
+    <None Remove="AssetBundles\lasericeumbrella" />
+    <None Remove="AssetBundles\magmashroom" />
+    <None Remove="AssetBundles\marigoldbomb" />
+    <None Remove="AssetBundles\melonademortar" />
+    <None Remove="AssetBundles\obisidianchomper" />
+    <None Remove="AssetBundles\obsidianseed" />
+    <None Remove="AssetBundles\obsidian_peashooter" />
+    <None Remove="AssetBundles\pitchermystery" />
+    <None Remove="AssetBundles\richsunflower" />
+    <None Remove="AssetBundles\shrine" />
+    <None Remove="AssetBundles\silvergatling" />
+    <None Remove="AssetBundles\sniperfreeze" />
+    <None Remove="AssetBundles\sniperhypno" />
+    <None Remove="AssetBundles\stargloom" />
+    <None Remove="AssetBundles\stinkper" />
+    <None Remove="AssetBundles\summercabbage" />
+    <None Remove="AssetBundles\sunnycommando" />
+    <None Remove="AssetBundles\sunnygatling" />
+    <None Remove="AssetBundles\sunnysniper" />
+    <None Remove="AssetBundles\superfirecattail" />
+    <None Remove="AssetBundles\superfiregloom" />
+    <None Remove="AssetBundles\superfirestar" />
+    <None Remove="AssetBundles\supergatlingmine" />
+    <None Remove="AssetBundles\supericecattail" />
+    <None Remove="AssetBundles\twindoomnut" />
+    <None Remove="AssetBundles\twintycoonshooter" />
+    <None Remove="AssetBundles\ulthypnet" />
+    <None Remove="AssetBundles\ultimatejaladoomfume" />
+    <None Remove="AssetBundles\umbrellamine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="AssetBundles\bladestar" />
+    <EmbeddedResource Include="AssetBundles\bowling" />
+    <EmbeddedResource Include="AssetBundles\clusterdoom" />
+    <EmbeddedResource Include="AssetBundles\dawning_shroom" />
+    <EmbeddedResource Include="AssetBundles\doomflower" />
+    <EmbeddedResource Include="AssetBundles\doomnutblover" />
+    <EmbeddedResource Include="AssetBundles\empaperzombie" />
+    <EmbeddedResource Include="AssetBundles\eventishroom" />
+    <EmbeddedResource Include="AssetBundles\explodonut" />
+    <EmbeddedResource Include="AssetBundles\fireclawzombie" />
+    <EmbeddedResource Include="AssetBundles\fireflower" />
+    <EmbeddedResource Include="AssetBundles\firepeashooter" />
+    <EmbeddedResource Include="AssetBundles\frenzerg" />
+    <EmbeddedResource Include="AssetBundles\frostumbrella" />
+    <EmbeddedResource Include="AssetBundles\fumeumbrella" />
+    <EmbeddedResource Include="AssetBundles\garlicboom" />
+    <EmbeddedResource Include="AssetBundles\garpuff" />
+    <EmbeddedResource Include="AssetBundles\goldengatling" />
+    <EmbeddedResource Include="AssetBundles\goldentycoongatling" />
+    <EmbeddedResource Include="AssetBundles\hybridmelon" />
+    <EmbeddedResource Include="AssetBundles\hypnopaperzombie" />
+    <EmbeddedResource Include="AssetBundles\icechomper" />
+    <EmbeddedResource Include="AssetBundles\icedoomultistar" />
+    <EmbeddedResource Include="AssetBundles\iceflower" />
+    <EmbeddedResource Include="AssetBundles\jalachomper" />
+    <EmbeddedResource Include="AssetBundles\jalahypno" />
+    <EmbeddedResource Include="AssetBundles\lasericeumbrella" />
+    <EmbeddedResource Include="AssetBundles\magmashroom" />
+    <EmbeddedResource Include="AssetBundles\marigoldbomb" />
+    <EmbeddedResource Include="AssetBundles\melonademortar" />
+    <EmbeddedResource Include="AssetBundles\obisidianchomper" />
+    <EmbeddedResource Include="AssetBundles\obsidianseed" />
+    <EmbeddedResource Include="AssetBundles\obsidian_peashooter" />
+    <EmbeddedResource Include="AssetBundles\pitchermystery" />
+    <EmbeddedResource Include="AssetBundles\richsunflower" />
+    <EmbeddedResource Include="AssetBundles\shrine" />
+    <EmbeddedResource Include="AssetBundles\silvergatling" />
+    <EmbeddedResource Include="AssetBundles\sniperfreeze" />
+    <EmbeddedResource Include="AssetBundles\sniperhypno" />
+    <EmbeddedResource Include="AssetBundles\stargloom" />
+    <EmbeddedResource Include="AssetBundles\stinkper" />
+    <EmbeddedResource Include="AssetBundles\summercabbage" />
+    <EmbeddedResource Include="AssetBundles\sunnycommando" />
+    <EmbeddedResource Include="AssetBundles\sunnygatling" />
+    <EmbeddedResource Include="AssetBundles\sunnysniper" />
+    <EmbeddedResource Include="AssetBundles\superfirecattail" />
+    <EmbeddedResource Include="AssetBundles\superfiregloom" />
+    <EmbeddedResource Include="AssetBundles\superfirestar" />
+    <EmbeddedResource Include="AssetBundles\supergatlingmine" />
+    <EmbeddedResource Include="AssetBundles\supericecattail" />
+    <EmbeddedResource Include="AssetBundles\twindoomnut" />
+    <EmbeddedResource Include="AssetBundles\twintycoonshooter" />
+    <EmbeddedResource Include="AssetBundles\ulthypnet" />
+    <EmbeddedResource Include="AssetBundles\ultimatejaladoomfume" />
+    <EmbeddedResource Include="AssetBundles\umbrellamine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\net6\0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+    </Reference>
+    <Reference Include="CustomizeLib.MelonLoader">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\Mods\CustomizeLib.MelonLoader.dll</HintPath>
+    </Reference>
+    <Reference Include="Il2CppInterop.Common">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\net6\Il2CppInterop.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\net6\Il2CppInterop.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\Il2Cppmscorlib.dll</HintPath>
+    </Reference>
+    <Reference Include="Il2CppSystem.Core">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\Il2CppSystem.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="IndexRange">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\net6\IndexRange.dll</HintPath>
+    </Reference>
+    <Reference Include="MelonLoader">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\net6\MelonLoader.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.2D.Common.Runtime">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\Unity.2D.Common.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Mathematics">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\Unity.Mathematics.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\Unity.TextMeshPro.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.VisualScripting.Core">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\Unity.VisualScripting.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.AnimationModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.AssetBundleModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.AudioModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.ParticleSystemModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.Physics2DModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.Physics2DModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.PhysicsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIElementsModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.UIElementsModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>..\..\..\PvZ Fusion\PVZF 3.2.1 English\MelonLoader\Il2CppAssemblies\UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
