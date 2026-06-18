@@ -10,7 +10,7 @@ using HarmonyLib;
 using CustomizeLib;
 using UnityEngine.PlayerLoop;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class ObsidianSeed : MonoBehaviour

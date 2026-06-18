@@ -11,7 +11,7 @@ using CustomizeLib;
 using static MelonLoader.MelonLogger;
 using JetBrains.Annotations;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     public class FireFlower : MonoBehaviour
@@ -23,13 +23,41 @@ namespace AMRaileds_Custom_Plants
                 return base.gameObject.GetComponent<Producer>();
             }
         }
+        public float pointCooldown = 0;
+        public float pointInterval = 1;
         public void Awake()
         {
             plant.attributeCount = 0;
         }
-        public void Update()
+        public void AddPoint()
         {
             var cPlant = base.GetComponent<Producer>();
+            cPlant.attributeCount++;
+            if (cPlant.attributeCount >= 20)
+            {
+                Lawnf.SetDroppedCard(this.transform.position, PlantType.Jalapeno);
+                cPlant.attributeCount = 0;
+                /*GameObject obj = null;
+                for (int i = 0; i < 9; i++)
+                {
+                    obj = CreatePlant.Instance.SetPlant(plant.thePlantColumn + i, plant.thePlantRow, PlantType.Jalapeno);
+                    if (obj is not null)
+                    {
+                        break;
+                    }
+                }
+                cPlant.attributeCount = 0;*/
+            }
+        }
+        public void Update()
+        {
+            this.pointCooldown -= Time.deltaTime;
+            if (this.pointCooldown <= 0)
+            {
+                this.pointCooldown = this.pointInterval;
+                this.AddPoint();
+            }
+
             var pos = plant.transform.position;
             var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .8f), 1f);
             foreach (var b in array)
@@ -37,22 +65,7 @@ namespace AMRaileds_Custom_Plants
                 if (b is not null && b.gameObject.TryGetComponent<Bullet_smallSun>(out var sun) && sun.theBulletRow == plant.thePlantRow)
                 {
                     sun.Die();
-                    cPlant.attributeCount++;
-                    if (cPlant.attributeCount >= 20)
-                    {
-                        Lawnf.SetDroppedCard(this.transform.position, PlantType.Jalapeno);
-                        cPlant.attributeCount = 0;
-                        /*GameObject obj = null;
-                        for (int i = 0; i < 9; i++)
-                        {
-                            obj = CreatePlant.Instance.SetPlant(plant.thePlantColumn + i, plant.thePlantRow, PlantType.Jalapeno);
-                            if (obj is not null)
-                            {
-                                break;
-                            }
-                        }
-                        cPlant.attributeCount = 0;*/
-                    }
+                    this.AddPoint();
                 }
             }
         }

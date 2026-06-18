@@ -13,7 +13,7 @@ using CustomizeLib.MelonLoader;
 using Il2CppInterop.Runtime.Injection;
 using Unity.Mathematics;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     public class VolcanoShroom : MonoBehaviour

@@ -10,7 +10,7 @@ using HarmonyLib;
 using CustomizeLib;
 using Unity.Mathematics;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     public class DoomBloverNut : MonoBehaviour
@@ -39,12 +39,18 @@ namespace AMRaileds_Custom_Plants
             {
                 BlowCountdown = BlowInterval;
                 int embered = 0;
+                var reqDistance = .8f;
+
+                if (Lawnf.TravelAdvanced(TwinDoomNut.buff1))
+                {
+                    reqDistance = 1.7f;
+                }
                 foreach (Zombie zombie in Board.Instance.zombieArray)
                 {
                     if (zombie != null)
                     {
                         var distance = (zombie.transform.position + Vector3.up * 1.5f - this.transform.position).magnitude;
-                        if (distance <= 1.9f)
+                        if (distance <= reqDistance)
                         {
                             if (zombie.isEmbered) embered++;
                             zombie.AddEmberScore();
@@ -58,7 +64,7 @@ namespace AMRaileds_Custom_Plants
                 {
                     if (otherPlant != null && otherPlant.thePlantColumn == plant.thePlantColumn && otherPlant.thePlantRow == plant.thePlantRow)
                     {
-                        otherPlant.Recover(200 + 25 * embered);
+                        otherPlant.Recover(400 + 35 * embered);
                     }
                 }
             }

@@ -2,8 +2,9 @@
 using MelonLoader;
 using UnityEngine;
 using Il2CppInterop.Runtime.Attributes;
+using HarmonyLib;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     public class SuperFireStar : MonoBehaviour
@@ -55,15 +56,19 @@ namespace AMRaileds_Custom_Plants
             if (shots%12==0)
             {
                 ParticleManager.Instance.SetParticle(ParticleType.BombCloud_vision_doom, center);
+                if (shots % 24 == 0)
+                {
+                    Lawnf.SetDroppedCard(center, PlantType.DoomStar);
+                }
                 foreach (var zombie in Board.Instance.zombieArray)
                 {
                     if (zombie != null)
                     {
                         var distance = (zombie.transform.position - center).magnitude;
-                        var damage = (int)(900 - (distance * 50));
+                        var damage = (int)(450 - (distance * 40));
                         if (Lawnf.TravelAdvanced(SuperFireGloom.buff1))
                         {
-                            damage = (int)(1800 - (distance * 12));
+                            damage = (int)(900 - (distance * 10));
                         }
                         zombie.TakeDamage(DmgType.NormalAll, damage);
                         zombie.AddEmberScore();
@@ -79,5 +84,19 @@ namespace AMRaileds_Custom_Plants
         }
 
         public static BulletType bullet = BulletType.Bullet_seaStar;
+    }
+    [HarmonyPatch(typeof(StarFruit))]
+    public static class StarFruitPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch("Shoot1")]
+        public static bool PreShoot1(StarFruit __instance)
+        {
+            if (__instance.thePlantType == (PlantType)837)
+            {
+                return false;
+            }
+            return true;
+        }
     }
 }

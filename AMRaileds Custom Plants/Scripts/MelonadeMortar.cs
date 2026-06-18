@@ -1,15 +1,16 @@
-﻿using System;
+﻿using CustomizeLib;
+using CustomizeLib.MelonLoader;
+using HarmonyLib;
+using Il2Cpp;
+using MelonLoader;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
-using MelonLoader;
-using Il2Cpp;
-using HarmonyLib;
-using CustomizeLib;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class MelonadeMortar : MonoBehaviour
@@ -62,6 +63,74 @@ namespace AMRaileds_Custom_Plants
             if (this.plant.attributeCount >= 3)
             {
                 this.plant.attributeCount = 0;
+            }
+        }
+    }
+    [HarmonyPatch(typeof(Bullet_cannon))]
+    public static class Bullet_cannonPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch("HitLand")]
+        public static bool PreHitLand(Bullet_cannon __instance)
+        {
+            if (__instance.theBulletType == BulletType.Bullet_goldMelonCannon && __instance.Damage == 240)
+            {
+                CreateParticle.SetParticle(71, new(__instance.cannonPos.x, __instance.cannonPos.y), __instance.theBulletRow);
+                var pos = __instance.transform.position;
+                LayerMask layermask = __instance.zombieLayer.m_Mask;
+                var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y), 1f);
+                foreach (var z in array)
+                {
+                    if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie) && !zombie.isMindControlled)
+                    {
+                        if (Lawnf.TravelAdvanced(MelonadeMortar.buff2) && zombie.GetTotalHealth() <= 1200)
+                        {
+                            zombie.TakeDamage(DmgType.IceShieldless, 5000);
+                        }
+                        zombie.TakeDamage(DmgType.IceAll, 240);
+                        zombie.AddfreezeLevel(10);
+                        zombie.SetCold(8);
+                        if ((new System.Random()).Next(1, 4) <= 1)
+                        {
+                            CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 39, 0);
+
+                        }
+                        else
+                        {
+                            CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 38, 0);
+                        }
+                    }
+                }
+                GameAPP.PlaySound(UnityEngine.Random.RandomRangeInt(104, 106));
+                __instance.Die();
+                return false;
+            }
+            return true;
+        }
+    }
+    [HarmonyPatch(typeof(Bullet_silverMelon))]
+    public static class Bullet_silverMelonPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch("HitZombie")]
+        public static void PreHitZombie(Bullet_silverMelon __instance, Zombie zombie)
+        {
+            if (__instance is not null && __instance.theBulletType == BulletType.Bullet_goldMelon && __instance.Damage == 140)
+            {
+                var pos = __instance.transform.position;
+                var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y), 1f);
+                foreach (var z in array)
+                {
+                    if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var tzombie))
+                    {
+                        if (tzombie.theZombieRow == __instance.theBulletRow || tzombie.theZombieRow == __instance.theBulletRow + 1 || tzombie.theZombieRow == __instance.theBulletRow - 1)
+                        {
+                            tzombie.AddfreezeLevel(10);
+                            tzombie.SetCold(8);
+                            CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(tzombie.transform.position.x), tzombie.theZombieRow, 38, 0);
+                        }
+                    }
+                }
             }
         }
     }

@@ -10,7 +10,7 @@ using HarmonyLib;
 using CustomizeLib;
 using static MelonLoader.MelonLogger;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [HarmonyPatch(typeof(DoomShroom))]
     public static class DoomShroomPatch

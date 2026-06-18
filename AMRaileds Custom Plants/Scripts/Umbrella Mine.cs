@@ -9,10 +9,10 @@ using Il2Cpp;
 using HarmonyLib;
 using CustomizeLib;
 using Il2CppInterop.Runtime.Attributes;
-using AMRaileds_Custom_Plants;
+using IdeasCustom;
 using static MelonLoader.MelonLogger;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class UmbrellaMine : MonoBehaviour

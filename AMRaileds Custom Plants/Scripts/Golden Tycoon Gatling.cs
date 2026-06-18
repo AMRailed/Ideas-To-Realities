@@ -11,7 +11,7 @@ using CustomizeLib;
 using Unity.Profiling;
 using Il2CppInterop.Runtime.Attributes;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class GoldenTycoonGatling : MonoBehaviour
@@ -61,6 +61,31 @@ namespace AMRaileds_Custom_Plants
             bullet.theBulletRow = this.plant.thePlantRow;
 
             return bullet;
+        }
+    }
+    [HarmonyPatch(typeof(Bullet_silverCoin))]
+    public static class GoldCoinPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch("HitZombie")]
+        public static void PreHitZombie(Bullet_silverCoin __instance, Zombie zombie)
+        {
+            if (__instance.Damage == 8713)
+            {
+                __instance.Damage = 500 + Mathf.FloorToInt(Board.Instance.theMoney / 100);
+                if (Lawnf.TravelAdvanced(GoldenTycoonGatling.buff1))
+                {
+                    __instance.Damage = 500 + Mathf.FloorToInt(Board.Instance.theMoney / 100) + Mathf.FloorToInt(Board.Instance.theSun / 100);
+                }
+                if (Lawnf.TravelAdvanced(GoldenTycoonGatling.buff2))
+                {
+                    CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 39, 0);
+                    if (Lawnf.TravelAdvanced(GoldenTycoonGatling.buff1))
+                    {
+                        CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 0, 0);
+                    }
+                }
+            }
         }
     }
 }

@@ -9,12 +9,11 @@ using Il2Cpp;
 using HarmonyLib;
 using CustomizeLib;
 using Il2CppSystem.Linq.Expressions.Interpreter;
-using Harmony;
 using Il2CppSystem.IO;
 using Il2CppSystem.Collections;
 using UnityEngine.UIElements;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     public enum ShrineType {
         Slice,
@@ -166,7 +165,7 @@ namespace AMRaileds_Custom_Plants
                 {
                     if (Lawnf.IsSuperPlant(plt.thePlantType) || Lawnf.IsUltiPlant(plt.thePlantType) || plt.thePlantType == PlantType.ScaredyPotato)
                     {
-                        plt.Die(Plant.DieReason.ByShovel);
+                        plt.Die(Plant.DieReason.BySelf);
                         if (Lawnf.IsUltiPlant(plt.thePlantType))
                         {
                             Score += 2;
@@ -297,6 +296,24 @@ namespace AMRaileds_Custom_Plants
                     {
                         z.TakeDamage(DmgType.NormalAll, 10*domainAmplifier);
                     }
+                }
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(Plant))]
+    public static class ShrineDamagePatch
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch("TakeDamage")]
+        public static void PostTakeDamage(Plant __instance)
+        {
+            if (__instance.thePlantType == (PlantType)820)
+            {
+                var scream = __instance.gameObject.GetComponent<Shrine>();
+                if (scream != null)
+                {
+                    scream.screamLength = 1f;
                 }
             }
         }

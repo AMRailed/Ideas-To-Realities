@@ -10,7 +10,7 @@ using HarmonyLib;
 using CustomizeLib;
 using Il2CppInterop.Runtime.Attributes;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class MagmaShroom : MonoBehaviour

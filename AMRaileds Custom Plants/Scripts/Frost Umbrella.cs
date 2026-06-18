@@ -11,7 +11,7 @@ using CustomizeLib;
 using static MelonLoader.MelonLogger;
 using Il2CppInterop.Runtime.Attributes;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class FrostUmbrella : MonoBehaviour
@@ -38,6 +38,15 @@ namespace AMRaileds_Custom_Plants
             {
                 return base.gameObject.GetComponent<CabbageUmbrella>();
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(CabbageUmbrella), "BlockEffect")]
+    public static class CabbageUmbrellaPatch
+    {
+        public static bool Prefix(CabbageUmbrella __instance, ref Zombie zombie)
+        {
+            return FrostUmbrella.SBlockEffect(__instance, ref zombie) && UmbrellaMine.SBlockEffect(__instance, ref zombie);
         }
     }
 }

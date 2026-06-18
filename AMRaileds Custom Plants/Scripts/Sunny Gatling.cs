@@ -9,7 +9,7 @@ using Il2Cpp;
 using HarmonyLib;
 using CustomizeLib;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class SunnyGatling : MonoBehaviour

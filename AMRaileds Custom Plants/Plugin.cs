@@ -1,4 +1,4 @@
-﻿using AMRaileds_Custom_Plants.Scripts;
+﻿using IdeasCustom.Scripts;
 using CustomizeLib;
 using CustomizeLib.MelonLoader;
 using HarmonyLib;
@@ -21,14 +21,17 @@ using Unity.Mathematics;
 using Unity.Mathematics.Geometry;
 using Unity.VisualScripting;
 using UnityEngine;
+using static Il2Cpp.Board;
 using static MelonLoader.MelonLogger;
+using UnityEngine.UI;
+using System.Runtime.Intrinsics.X86;
 
 
-[assembly: MelonInfo(typeof(AMRaileds_Custom_Plants.Plugin), "Ideas to Realities", "1.4.0", "AMRailed and Others")]
+[assembly: MelonInfo(typeof(IdeasCustom.Plugin), "Ideas to Realities", "1.4.0", "AMRailed and Others")]
 [assembly: MelonGame("LanPiaoPiao", "PlantsVsZombiesRH")]
 [assembly: MelonPlatformDomain(MelonPlatformDomainAttribute.CompatibleDomains.IL2CPP)]
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     public static class Extensions
     {
@@ -55,24 +58,91 @@ namespace AMRaileds_Custom_Plants
         }
     }
 
+    public enum BossRushStage
+    {
+        Normal,
+        Odyssey,
+        Ascended
+    }
+
     public class Plugin : MelonMod
     {
         //public static GameObject LaserIceUmbrellalightBall = null;
         //public static GameObject LaserIceUmbrellatheLight = null;
         public static Dictionary<Zombie, int> emberScores = new Dictionary<Zombie, int>();
+        public static Plugin instance;
 
-        public CustomLevelData SuperFireGloomLevelData = new CustomLevelData();
-        public CustomLevelData DoomsdayLevelData = new CustomLevelData();
-        public CustomLevelData DoomsdayOdysseyLevelData = new CustomLevelData();
+        public static Sprite DarkHelmetBullet;
+        public static Sprite BuckportalBullet;
+        public static Sprite DoomCabbageBullet;
+
+        public static int SuperFireGloomLevelID = 0;
+        public static int PortalHelmetPeaLevelID = 0;
+        public static int SaladGatlingLevelID = 0;
+        public static int DoomsdayLevelID = 0;
+        public static int DoomsdayOdysseyLevelID = 0;
+        public static int BossRushLevelID = 0;
+
+        public static List<PlantType> BossRushSet1 = new List<PlantType>()
+        {
+            (PlantType)805,
+            PlantType.Melonpult,
+            PlantType.CornCabbage,
+            PlantType.WallNut,
+            PlantType.LotusBamboo,
+            PlantType.SpruceShulk,
+            PlantType.WaterAloes,
+            PlantType.CherryUmbrella,
+            PlantType.ObsidianJalapeno,
+        };
+
+        public static List<PlantType> BossRushSet2 = new List<PlantType>()
+        {
+            (PlantType)806,
+            PlantType.SuperMelon,
+            PlantType.WallNut,
+            PlantType.LotusBamboo,
+            PlantType.SuperSpruce,
+            PlantType.IronPumpkin,
+            PlantType.CherryUmbrella,
+            PlantType.ObsidianJalapeno,
+            PlantType.TallIceNut,
+            PlantType.IceDoom,
+        };
+
+        public BossRushStage CurrentBossRushStage = BossRushStage.Normal;
+        public bool BossRushHelp = false;
 
         public static void ApplyEmberScore(Zombie zombie, int amount)
         {
             if (emberScores.ContainsKey(zombie))
             {
-                emberScores[zombie]++;
-                if (emberScores[zombie] >= 5)
+                emberScores[zombie] += amount;
+
+                var generalEmberBuff = Lawnf.TravelAdvanced(TwinDoomNut.buff2);
+                var threshold = 5;
+                if (generalEmberBuff)
+                {
+                    threshold = 2;
+                }
+
+                if (emberScores[zombie] >= threshold && !zombie.isEmbered)
                 {
                     zombie.SetEmbered();
+                    if (generalEmberBuff)
+                    {
+                        ParticleManager.Instance.SetParticle(ParticleType.DoomSplat, zombie.transform.position + UnityEngine.Vector3.up * 2f);
+                        var pos = zombie.transform.position;
+                        var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + 2), 2.5f);
+                        foreach (var z in array)
+                        {
+                            if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zomb))
+                            {
+                                zomb.TakeDamage(DmgType.NormalAll, 10);
+                                zomb.AddEmberScore(2);
+                            }
+                        }
+                    }
                 }
             }
             else
@@ -141,12 +211,12 @@ namespace AMRaileds_Custom_Plants
         public static System.Collections.IEnumerator FireOcean(UnityEngine.Vector2 location)
         {
             var ticksParticle = 0;
-            for (int i=0; i<400; i++)
+            for (int i = 0; i < 400; i++)
             {
                 ticksParticle++;
                 var array = Physics2D.OverlapCircleAll(new(location.x, location.y), 1f);
                 var bulletRow = Mouse.Instance.GetRowFromY(location.x, location.y);
-                if (ticksParticle%10==0) ParticleManager.Instance.SetParticle(ParticleType.FireOcean, location - new UnityEngine.Vector2(0, 0.4f), bulletRow);
+                if (ticksParticle % 10 == 0) ParticleManager.Instance.SetParticle(ParticleType.FireOcean, location - new UnityEngine.Vector2(0, 0.4f), bulletRow);
                 foreach (var z in array)
                 {
                     if (z != null && z.gameObject.TryGetComponent<Zombie>(out var otherZ) && (otherZ.theZombieRow == bulletRow))
@@ -159,71 +229,431 @@ namespace AMRaileds_Custom_Plants
             }
         }
 
-        /*public static CustomLevelData SuperFireGloomLevelData = new CustomLevelData();
-        public static CustomLevelData DoomsdayLevelData = new CustomLevelData();
-        public static CustomLevelData DoomsdayOdysseyLevelData = new CustomLevelData();*/
+        public IEnumerator InitializeBossRush()
+        {
+            CustomLevelData customLevelData;
+            if (!Utils.IsCustomLevel(out customLevelData)) Plugin.printString("Failed to run Boss Rush"); yield return "f";
+
+            Board board = Board.Instance;
+
+            yield return new WaitForSeconds(20f);
+            if (!board) yield return "f";
+
+            CurrentBossRushStage = BossRushStage.Normal;
+
+            //Zomboss
+            Plugin.printString("Zomboss Stage");
+            GameObject zomboss = CreateZombie.Instance.SetZombie(0, ZombieType.ZombieBoss);
+
+            while (zomboss && (zomboss.GetComponent<Zombie>().theHealth) > 0f)
+            {
+                if (board == null) break;
+                board.theWave = 1;
+                yield return null;
+            }
+            ;
+            board.theWave = 10;
+
+            yield return new WaitForSeconds(3);
+
+            GameObject.Destroy(zomboss);
+            board.CreateFreeze(new(0, 0));
+
+            //Golden Zomboss
+            Plugin.printString("Golden Zomboss Stage");
+            GameObject zomboss2 = CreateZombie.Instance.SetZombie(0, ZombieType.ZombieBoss2);
+
+            while (zomboss2 && (zomboss2.GetComponent<Zombie>().theHealth) > 0f)
+            {
+                if (board == null) break;
+                board.theWave = 11;
+                yield return null;
+            }
+            ;
+            board.theWave = 20;
+
+            yield return new WaitForSeconds(3);
+
+            GameObject.Destroy(zomboss2);
+            board.CreateFreeze(new(0, 0));
+
+            //Snow Queen
+            Plugin.printString("Snow Queen Stage");
+            CurrentBossRushStage = BossRushStage.Odyssey;
+
+            for (int i = 0; i < 5; i++)
+            {
+                CreatePlant.Instance.SetPlant(0, i, PlantType.IronPumpkin).GetComponent<Plant>();
+                CreatePlant.Instance.SetPlant(1, i, PlantType.IronPumpkin).GetComponent<Plant>();
+                CreatePlant.Instance.SetPlant(2, i, PlantType.IronPumpkin).GetComponent<Plant>();
+                CreatePlant.Instance.SetPlant(3, i, PlantType.IronPumpkin).GetComponent<Plant>();
+                CreatePlant.Instance.SetPlant(4, i, PlantType.IronPumpkin).GetComponent<Plant>();
+            }
+
+            GameObject snowQueen = CreateZombie.Instance.SetZombie(2, ZombieType.UltimateSnowZombie);
+            snowQueen.GetComponent<UltimateSnowZombie>().boss = true;
+
+            yield return new WaitForSeconds(3.2f);
+            //Reset Board and Conveyor
+            board.CreateFreeze(new(0, 0));
+            ConveyManager.Instance.ClearCards();
+            board.ClearTheBoard();
+            if (BossRushHelp)
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    CreatePlant.Instance.SetPlant(6, i, PlantType.UltimateTallNut);
+                    CreatePlant.Instance.SetPlant(7, i, PlantType.UltimateTallNut);
+
+                    CreatePlant.Instance.SetPlant(0, i, PlantType.UltimatePumpkin);
+                    CreatePlant.Instance.SetPlant(1, i, PlantType.UltimatePumpkin);
+                }
+            }
+
+            while (snowQueen && (snowQueen.GetComponent<Zombie>().theHealth) > 0f)
+            {
+                if (board == null) break;
+                board.theWave = 21;
+                yield return null;
+            }
+            ;
+            board.theWave = 30;
+
+            yield return new WaitForSeconds(3);
+
+            GameObject.Destroy(snowQueen);
+            board.CreateFreeze(new(0, 0));
+
+            //Horse Boss
+            Plugin.printString("Horse Boss Stage");
+
+            GameObject horseBoss = CreateZombie.Instance.SetZombie(2, ZombieType.HorseBoss);
+            horseBoss.GetComponent<UltimateSnowZombie>().boss = true;
+
+            while (horseBoss && (horseBoss.GetComponent<Zombie>().theHealth) > 0f)
+            {
+                if (board == null) break;
+                board.theWave = 31;
+                yield return null;
+            }
+
+            yield return new WaitForSeconds(3);
+
+            GameObject.Destroy(horseBoss);
+            board.CreateFreeze(new(0, 0));
+
+            board.theWave = 40;
+        }
 
         public override void OnInitializeMelon()
         {
+            Plugin.instance = this;
+
             MelonLogger.Msg("The Ideas to Realities mod has loaded!");
             //AssetBundleCreateRequest firePeashooterBundleRequest = AssetBundle.LoadFromFileAsync("Mods/Custom_Plant_Bundles/firepeashooter");
             //AssetBundleCreateRequest obsidianPeaBundleRequest = AssetBundle.LoadFromFileAsync("Mods/Custom_Plant_Bundles/obsidian_peashooter");
 
-            AssetBundle HybridMelonAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.hybridmelon");
-            AssetBundle DawningShroomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.dawning_shroom");
-            AssetBundle SniperHypnoAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.sniperhypno");
-            AssetBundle EventiShroomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.eventishroom");
-            AssetBundle SniperFreezeAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.sniperfreeze");
-            AssetBundle DecaySniperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.stinkper");
-            AssetBundle FrenzergAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.frenzerg");
-            AssetBundle UltimateHypnoMagnetAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.ulthypnet");
-            AssetBundle ClusterDoomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.clusterdoom");
-            AssetBundle SunnySniperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.sunnysniper");
-            AssetBundle GarlicPuffAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.garpuff");
-            AssetBundle IceChomperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.icechomper");
-            AssetBundle IceDoomUltimateStarAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.icedoomultistar");
-            AssetBundle IceFlowerAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.iceflower");
-            AssetBundle RichSunflowerAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.richsunflower");
-            AssetBundle FireFlowerAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.fireflower");
-            AssetBundle JalaChomperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.jalachomper");
-            AssetBundle DoomFlowerAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.doomflower");
-            AssetBundle ObsidianChomperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.obisidianchomper");
-            AssetBundle SunnyGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.sunnygatling");
-            AssetBundle FumeUmbrellaAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.fumeumbrella");
-            AssetBundle FrostUmbrellaAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.frostumbrella");
-            AssetBundle SunnyCommandoAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.sunnycommando");
-            AssetBundle MelonadeMortarAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.melonademortar");
-            AssetBundle ExplodoNutAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.explodonut");
-            AssetBundle MarigoldBombAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.marigoldbomb");
-            AssetBundle TwinTycoonShooterAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.twintycoonshooter");
-            AssetBundle GarlicBoomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.garlicboom");
-            AssetBundle SilverGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.silvergatling");
-            AssetBundle GoldenGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.goldengatling");
-            AssetBundle GoldenTycoonGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.goldentycoongatling");
-            AssetBundle ObsidianSeedAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.obsidianseed");
-            AssetBundle LaserIceUmbrellaAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.lasericeumbrella");
-            AssetBundle SuperGatlingMineAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.supergatlingmine");
-            AssetBundle SummerCabbageAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.summercabbage");
-            AssetBundle BladeStarAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.bladestar");
-            AssetBundle MagmaShroomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.magmashroom");
-            AssetBundle JalaHypnoAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.jalahypno");
-            AssetBundle UltimateJalaDoomFumeAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.ultimatejaladoomfume");
-            AssetBundle UmbrellaMineAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.umbrellamine");
-            AssetBundle ShrineAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.shrine");
-            AssetBundle SuperIceCattailAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.supericecattail");
-            AssetBundle SuperFireCattailAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.superfirecattail");
-            AssetBundle SuperFireGloomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.superfiregloom");
-            AssetBundle PitcherMysteryAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.pitchermystery");
-            AssetBundle StargloomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.stargloom");
-            AssetBundle SuperFireStarAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.superfirestar");
-            AssetBundle TwinDoomNutAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.twindoomnut");
-            AssetBundle DoomNutBloverAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.doomnutblover");
+            AssetBundle HybridMelonAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.hybridmelon");
+            AssetBundle DawningShroomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.dawning_shroom");
+            AssetBundle SniperHypnoAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.sniperhypno");
+            AssetBundle EventiShroomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.eventishroom");
+            AssetBundle SniperFreezeAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.sniperfreeze");
+            AssetBundle DecaySniperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.stinkper");
+            AssetBundle FrenzergAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.frenzerg");
+            AssetBundle UltimateHypnoMagnetAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.ulthypnet");
+            AssetBundle ClusterDoomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.clusterdoom");
+            AssetBundle SunnySniperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.sunnysniper");
+            AssetBundle GarlicPuffAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.garpuff");
+            AssetBundle IceChomperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.icechomper");
+            AssetBundle IceDoomUltimateStarAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.icedoomultistar");
+            AssetBundle IceFlowerAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.iceflower");
+            AssetBundle RichSunflowerAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.richsunflower");
+            AssetBundle FireFlowerAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.fireflower");
+            AssetBundle JalaChomperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.jalachomper");
+            AssetBundle DoomFlowerAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.doomflower");
+            AssetBundle ObsidianChomperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.obisidianchomper");
+            AssetBundle SunnyGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.sunnygatling");
+            AssetBundle FumeUmbrellaAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.fumeumbrella");
+            AssetBundle FrostUmbrellaAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.frostumbrella");
+            AssetBundle SunnyCommandoAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.sunnycommando");
+            AssetBundle MelonadeMortarAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.melonademortar");
+            AssetBundle ExplodoNutAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.explodonut");
+            AssetBundle MarigoldBombAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.marigoldbomb");
+            AssetBundle TwinTycoonShooterAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.twintycoonshooter");
+            AssetBundle GarlicBoomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.garlicboom");
+            AssetBundle SilverGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.silvergatling");
+            AssetBundle GoldenGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.goldengatling");
+            AssetBundle GoldenTycoonGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.goldentycoongatling");
+            AssetBundle ObsidianSeedAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.obsidianseed");
+            AssetBundle LaserIceUmbrellaAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.lasericeumbrella");
+            AssetBundle SuperGatlingMineAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.supergatlingmine");
+            AssetBundle SummerCabbageAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.summercabbage");
+            AssetBundle BladeStarAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.bladestar");
+            AssetBundle MagmaShroomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.magmashroom");
+            AssetBundle JalaHypnoAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.jalahypno");
+            AssetBundle UltimateJalaDoomFumeAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.ultimatejaladoomfume");
+            AssetBundle UmbrellaMineAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.umbrellamine");
+            AssetBundle ShrineAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.shrine");
+            AssetBundle SuperIceCattailAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.supericecattail");
+            AssetBundle SuperFireCattailAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.superfirecattail");
+            AssetBundle SuperFireGloomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.superfiregloom");
+            AssetBundle PitcherMysteryAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.pitchermystery");
+            AssetBundle StargloomAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.stargloom");
+            AssetBundle SuperFireStarAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.superfirestar");
+            AssetBundle TwinDoomNutAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.twindoomnut");
+            AssetBundle DoomNutBloverAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.doomnutblover");
+            AssetBundle ProtalHelmetGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.protalhelmetgatling");
+            AssetBundle SaladGatlingAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.saladgatling");
+            AssetBundle BushPlantAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.bushplant");
+            AssetBundle HellsNutAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.hellnut");
+            AssetBundle PickeledPepperAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.pickeledpepper");
+            AssetBundle MegaDoomCabbageAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.megadoomcabbage");
+            AssetBundle ShrinePotAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.shrinepot");
 
             //Zombies\\
-            AssetBundle HypnoPaperZombieAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.hypnopaperzombie");
-            AssetBundle FireClawZombieAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.AssetBundles.fireclawzombie");
+            AssetBundle HypnoPaperZombieAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.hypnopaperzombie");
+            AssetBundle FireClawZombieAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.fireclawzombie");
+            AssetBundle DeathcatcherAssetBundle = ResourceLoader.LoadBundleFromEmbedded("Ideas_Custom.Resources.AssetBundles.deathcatcher");
+
+            //Misc.\\
+            Sprite BossRushLogo = ResourceLoader.LoadSpriteFromEmbedded("Ideas_Custom.Resources.Images.bossrush.jpg", 50);
+            DarkHelmetBullet = ResourceLoader.LoadSpriteFromEmbedded("Ideas_Custom.Resources.Images.Bullets.DarkHelmetBullet.png", 100);
+            BuckportalBullet = ResourceLoader.LoadSpriteFromEmbedded("Ideas_Custom.Resources.Images.Bullets.BuckportalBullet.png", 100);
+            DoomCabbageBullet = ResourceLoader.LoadSpriteFromEmbedded("Ideas_Custom.Resources.Images.Bullets.DoomCabbageBullet.png", 100);
+            /*if (PickeledPepperAssetBundle == null)
+            {
+                MelonLogger.Msg("Missing Pickled Pepper's Bundle");
+            }
+            else
+            {
+                GameObject prefabObj = ResourceLoader.GetResourceFromBundle(PickeledPepperAssetBundle, "JalapenoPrefab");
+                GameObject previewObj = ResourceLoader.GetResourceFromBundle(PickeledPepperAssetBundle, "JalapenoPreview");
+                if ((prefabObj != null) && (previewObj != null))
+                {
+                    MelonLogger.Msg("Successfully Loaded Pickled Pepper's Asset Bundle");
+                    CustomCore.RegisterCustomPlant<Jalapeno, PickledPepper>(843, prefabObj, previewObj, new(), 1.9f, 0f, 20, 300, 5f, 125);
+                    CustomCore.TypeMgrExtra.IsFirePlant.Add((PlantType)843);
+                    CustomCore.AddPlantAlmanacStrings(843, "Pickled Pepper", "(@theoneandonly30) Burns an entire... column?\n\n<color=#3D1400>Damage: </color><color=#8B0000> 1800 (Cremator) </color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Releases a column of flames on the column it is planted in that deals 1800 cremator damage.\n\n</color>Cost : <color=#8B0000>125 Sun</color>\n\n</color>Recharge : <color=#8B0000>25 Seconds</color>");
+                }
+            }
+            if (HellsNutAssetBundle == null)
+            {
+                MelonLogger.Msg("Missing Hells Nut's Bundle");
+            }
+            else
+            {
+                GameObject prefabObj = ResourceLoader.GetResourceFromBundle(HellsNutAssetBundle, "HellNutPrefab");
+                GameObject previewObj = ResourceLoader.GetResourceFromBundle(HellsNutAssetBundle, "HellNutPreview");
+                if ((prefabObj != null) && (previewObj != null))
+                {
+                    MelonLogger.Msg("Successfully Loaded Hells Nut's Asset Bundle");
+                    CustomCore.RegisterCustomPlant<Plant, Hellnut>(844, prefabObj, previewObj, new(), 1.9f, 0f, 20, 8000, 5f, 325);
+                    CustomCore.TypeMgrExtra.UncrashablePlants.Add((PlantType)844);
+                    CustomCore.TypeMgrExtra.IsNut.Add((PlantType)844);
+                    CustomCore.AddPlantAlmanacStrings(844, "Hell's Nut", "(@amrailed) A nut formed within hell's depth.\n\n<color=#3D1400>Toughness: </color><color=#8B0000> 8000 </color>\n\n<color=#3D1400>Damage: </color><color=#8B0000> 35 / Bite</color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> When eaten, inflicts, enflamed, and a single karma point to all zombies near it.\n<color=black>•</color> \n\n</color>Fusion Formula : <color=#8B0000> (Wall-Nut + Jalapeno) + (Tangle-Kelp + Jalapeno) </color>");
+                }
+            }*/
+            if (MegaDoomCabbageAssetBundle == null)
+            {
+                MelonLogger.Msg("Missing Mega Doom Cabbage's Bundle");
+            }
+            else
+            {
+                GameObject prefabObj = ResourceLoader.GetResourceFromBundle(MegaDoomCabbageAssetBundle, "DoomCabbagePrefab");
+                GameObject previewObj = ResourceLoader.GetResourceFromBundle(MegaDoomCabbageAssetBundle, "DoomCabbagePreview");
+                if ((prefabObj != null) && (previewObj != null))
+                {
+                    MelonLogger.Msg("Successfully Loaded Mega Doom Cabbage's Asset Bundle");
+                    CustomCore.RegisterCustomPlant<Cabbage, MegaDoomCabbage>(846, prefabObj, previewObj, new()
+                    {
+                        (1111, 11), (11, 1111)
+                    }, 1.9f, 0f, 600, 300, 5f, 675);
+                    CustomCore.AddFusion(1111, 846, 1);
+                    CustomCore.AddFusion(1111, 1, 864);
+                    CustomCore.AddPlantAlmanacStrings(846, "Nemesis Cabbage", "(@theoneandonly30) Immerse oneself in pure death.\n\n<color=#3D1400>Damage: </color><color=#8B0000> 600 * 5 / 2 seconds</color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Shoots 5 doom cabbages that explode in 3x3 area, dealing 600 damage initial damage and then another 600 area damage which also applies 1 Ember Score.\n<color=black>•</color> Modifier Affilation 1 : Each projectile has a 5% chance to release a doom detonation that deals 12800 damage, chances increase with each ember score.\n<color=black>•</color> Modifier Affilation 2 : Deals 2.5x explosion damage and 10x direct hit damage.\n\n</color>Fusion Formula : <color=#8B0000>Helios Cabbage + Doom-Shroom</color>");
+                }
+            }
+            if (ShrinePotAssetBundle == null)
+            {
+                MelonLogger.Msg("Missing Shrine Pot's Bundle");
+            }
+            else
+            {
+                GameObject prefabObj = ResourceLoader.GetResourceFromBundle(ShrinePotAssetBundle, "PotPrefab");
+                GameObject previewObj = ResourceLoader.GetResourceFromBundle(ShrinePotAssetBundle, "PotPreview");
+                GameObject particleObj = ResourceLoader.GetResourceFromBundle(ShrinePotAssetBundle, "Tentacle");
+                if ((prefabObj != null) && (previewObj != null))
+                {
+                    MelonLogger.Msg("Successfully Loaded Shrine Pot's Asset Bundle");
+                    CustomCore.RegisterCustomPlant<Pot, ShrinePot>(845, prefabObj, previewObj, new()
+                    {
+                        (27, 820)
+                    }, 1.9f, 0f, 100, 300, 5f, 25);
+                    CustomCore.TypeMgrExtra.IsPot.Add((PlantType)845);
+                    CustomCore.RegisterCustomParticle((ParticleType)250, particleObj);
+                    CustomCore.AddPlantAlmanacStrings(845, "Basin", "(@amrailed) A souless pot.\n\n<color=#3D1400>Damage: </color><color=#8B0000> 100 / 0.5 Seconds </color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Deals a constant 100 damage every 0.5 seconds in a 5x1 area (5 column, 1 row).\n<color=black>•</color> Eats 100 health away on the plant planted on the pot every second to increase its base damage by 20, upon reaching 500 damage, right click on it to sacrifice the plant ontop of it and for every 100 health the plant ontop of it has, deals 15 damage to all zombies on the lawn also temporarily increase damage by 25 for every 100 health.\n<color=black>•</color> If a Shrine is placed ontop of this pot, it will naturally give an extra 5 score if a ritual is successful, and increases the pot's base damage by 25 for every successful ritual.\n\n</color>Fusion Formula : <color=#8B0000>Shrine > Flower Pot</color>");
+                }
+            }
+            if (BushPlantAssetBundle == null)
+            {
+                MelonLogger.Msg("Missing Bush's Bundle");
+            }
+            else
+            {
+                GameObject prefabObj = ResourceLoader.GetResourceFromBundle(BushPlantAssetBundle, "BushPrefab");
+                GameObject previewObj = ResourceLoader.GetResourceFromBundle(BushPlantAssetBundle, "BushPreview");
+                if ((prefabObj != null) && (previewObj != null))
+                {
+                    MelonLogger.Msg("Successfully Loaded Bush's Asset Bundle");
+                    CustomCore.RegisterCustomPlant<Plant, BushPlant>(842, prefabObj, previewObj, new(), 1.9f, 0f, 20, 300, 5f, 25);
+                    CustomCore.TypeMgrExtra.IsCaltrop.Add((PlantType)842);
+                    CustomCore.AddPlantAlmanacStrings(842, "Bush", "(@amrailed) Its a joke... Right?\n\n<color=#3D1400>Damage: </color><color=#8B0000> 2-4 / 0.35 seconds</color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Ignored by zombies, constantly deals 20-80 damage every second to all zombies in the bush. With a 1 in 700 chance of completely annhilating the zombie (no restrictions).\n\n</color>Cost : <color=#8B0000>25 Sun</color>\n</color>Recharge : <color=#8B0000>5 Seconds</color>");
+                }
+            }
+            if (SaladGatlingAssetBundle == null)
+            {
+                MelonLogger.Msg("Missing Salad Gatling's Bundle");
+            }
+            else
+            {
+                GameObject prefabObj = ResourceLoader.GetResourceFromBundle(SaladGatlingAssetBundle, "GatlingPeaPrefab");
+                GameObject previewObj = ResourceLoader.GetResourceFromBundle(SaladGatlingAssetBundle, "GatlingPeaPreview");
+
+                if ((prefabObj != null) && (previewObj != null))
+                {
+                    MelonLogger.Msg("Successfully Loaded Salad Gatling's Asset Bundle");
+                    CustomCore.RegisterCustomPlant<GatlingPea, SaladGatling>(841, prefabObj, previewObj, new List<(int, int)>
+                    { (1032, 1126), (1126, 1032) }, 1.5f, 0f, 160, 4000, 18f, 900);
+                    CustomCore.AddUltimatePlant((PlantType)841);
+                    SaladGatling.buff1 = CustomCore.RegisterCustomBuff("Salad Gatling : All modes has been enhanced to their supreme version.", BuffType.AdvancedBuff, () => (true), 3500, default, (PlantType)841);
+                    SaladGatling.buff2 = CustomCore.RegisterCustomBuff("Salad Gatling : Adds 2 new modes and doubles the base damage.", BuffType.AdvancedBuff, () => (true), 3500, default, (PlantType)841);
+                    CustomCore.AddPlantAlmanacStrings(841, "Salad Gatling", "(@wladimirkisl) Provides extreme fire power.\n\n<color=#3D1400>Damage: </color><color=#8B0000> Normal/Flower : 140*4/1 Seconds | Shotgun : 140*5/1.5 Seconds | Flow/Spray : 140/0.25 Second </color>\n\n<color=black>Modes (Click to cycle between them): </color><color=#8B0000>\n<color=black>•</color> Regular Mode : Shoot 4 Salads in the same lane every second, (Supreme: Enhanced to 4 salads per shot, 4 shots per burst).\n<color=black>•</color> Shotgun Mode : Shoot 5 Salads in 5 different directions every 1.5 seconds, (Supreme: Enhanced to 11 salads and 2 bursts).\n<color=black>•</color> Flow Mode : Shoots 1 salad every 0.25 seconds (Supreme: Enhanced to 4 salads).\n<color=black>•</color> (Requires Blooming Crest buff) Flower Mode : Shoots 8 salads in a circular pattern every second (Supreme: Enhanced to 32 salads).\n<color=black>•</color> (Requires Blooming Crest buff) Spray Mode : Shoots 1 salad in different directions every 0.25 seconds (Supreme: Adds 2 more salads alongside the first).\n\n<color=black>Odyssey Modifiers: </color><color=#8B0000>\n<color=black>•</color> Natural Evolution : All modes has been enhanced to their supreme version. \n<color=black>•</color> Blooming Crest : Adds 2 new modes and doubles the base damage. \n\n</color>Fusion Formula : <color=#8B0000> (Cabbage-Pult + Kernel-Pult + Melon-Pult) + Gatling-Pea </color>");
 
 
+                    CustomLevelData SaladGatlingLevelData = new CustomLevelData();
+                    SaladGatlingLevelData.BgmType = MusicType.Day;
+                    SaladGatlingLevelData.SceneType = SceneType.Day_6;
+                    SaladGatlingLevelData.AdvBuffs = () =>
+                    {
+                        var list = new List<int>();
+                        list.Add(PortalHelmetGatling.buff1);
+                        list.Add(PortalHelmetGatling.buff2);
+                        list.Add(16);
+                        list.Add(13);
+                        list.Add(9);
+                        list.Add(27);
+                        list.Add(32);
+                        return list;
+                    };
+                    SaladGatlingLevelData.PreSelectCards = () =>
+                    {
+                        var list = new List<PlantType>();
+                        list.Add((PlantType)841);
+                        list.Add((PlantType)1032);
+                        list.Add((PlantType)1126);
+                        return list;
+                    };
+                    SaladGatlingLevelData.ZombieList = () =>
+                    {
+                        var list = new List<ZombieType>();
+                        list.Add(ZombieType.NormalZombie);
+                        list.Add(ZombieType.ConeZombie);
+                        list.Add(ZombieType.BucketZombie);
+                        list.Add(ZombieType.FootballZombie);
+                        list.Add(ZombieType.TallNutFootballZombie);
+                        list.Add(ZombieType.FootballDrown);
+                        list.Add(ZombieType.BlackFootball_a);
+                        list.Add(ZombieType.BlackFootball_b);
+                        list.Add(ZombieType.BlackFootball_c);
+                        list.Add(ZombieType.UltimateFootballZombie);
+                        list.Add(ZombieType.FlagFootball);
+                        return list;
+                    };
+                    SaladGatlingLevelData.WaveCount = () => (30);
+                    SaladGatlingLevelData.Logo = previewObj.GetComponent<SpriteRenderer>().sprite;
+                    SaladGatlingLevelData.Name = () => ("Salad Gatling \nShowcase");
+                    SaladGatlingLevelData.RowCount = 6;
+
+                    var bTag = default(Board.BoardTag);
+                    bTag.enableAllTravelPlant = true;
+                    bTag.enableTravelPlant = true;
+                    SaladGatlingLevelData.BoardTag = bTag;
+                    CustomCore.RegisterCustomLevel(SaladGatlingLevelData);
+                }
+            }
+            if (ProtalHelmetGatlingAssetBundle == null)
+            {
+                MelonLogger.Msg("Missing Protal Helmet Gatling's Bundle");
+            }
+            else
+            {
+                GameObject prefabObj = ResourceLoader.GetResourceFromBundle(ProtalHelmetGatlingAssetBundle, "ProtalPeaPrefab");
+                GameObject previewObj = ResourceLoader.GetResourceFromBundle(ProtalHelmetGatlingAssetBundle, "ProtalPeaPreview");
+
+                if ((prefabObj != null) && (previewObj != null))
+                {
+                    MelonLogger.Msg("Successfully Loaded Protal Helmet Gatling's Asset Bundle");
+                    CustomCore.RegisterCustomPlant<GatlingPea, PortalHelmetGatling>(840, prefabObj, previewObj, new List<(int, int)>
+                    { (1208, 1306), (1306, 1208) }, 1.5f, 0f, 60, 4000, 18f, 700);
+                    CustomCore.TypeMgrExtra.IsMagnetPlants.Add((PlantType)840);
+                    CustomCore.AddUltimatePlant((PlantType)840);
+                    PortalHelmetGatling.buff1 = CustomCore.RegisterCustomBuff("Cosmic Quarterback Gatling : Start every round with a single overcharge that can be used at any point. Overcharging also slowly restores health of all plants near it.", BuffType.AdvancedBuff, () => (true), 3500, default, (PlantType)840);
+                    PortalHelmetGatling.buff2 = CustomCore.RegisterCustomBuff("Cosmic Quarterback Gatling : Increased damage during overcharge to 5x more, Increased overcharge duration, During overcharge the first shot of a burst will shoot blackportal footpeas going in different directions.", BuffType.AdvancedBuff, () => (true), 3500, default, (PlantType)840);
+                    CustomCore.AddPlantAlmanacStrings(840, "Cosmic Quarterback Gatling", "(@theoneandonly30) Only few could produce such like these.\n\n<color=#3D1400>Damage: </color><color=#8B0000> 160*4/1 second | 160*3 + 600/1 second every fourth burst (Average : 160 * 15 + 600 / 4 seconds) </color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Each burst shoots 3 buck peas and 1 blackportal footpea that knockback zombies. Blackportal footpeas applies 1 second of chornoshift, deals 1000 armor damage alongside 480 damage, deals 2000 extra armor damage to Tall-nut Footballs, and 1000 extra armor damage to Footballs. Iron peas and Blackportal Footpeas and has a 75% chance of bouncing, on the nineth burst shoot 3 buck peas and a rift bomb which teleport all zombies hit to the beginning, aswell as inflicting 3 seconds of chornoshift upon the first zombie hit, (or deals 2 tile knockback to mini-bosses (ignores immunities)).\n<color=black>•</color> Each shot stores an energy point, once 64 points are collected, click on it to boost its attack speed by 5 times for 6 seconds. Points aren't gained during this period. It will start pulsing with energy when its ready to overcharge. \n\n<color=black>Odyssey Modifiers: </color><color=#8B0000>\n<color=black>•</color> Reserve Energy : Start every round with a single overcharge that can be used at any point. Overcharging also slowly restores health of all plants near it (750 every second). \n<color=black>•</color> Relentless Attack : Increased damage during overcharge to 3x more (5x for football peas), Increased overcharge duration, During overcharge the first shot of a burst will shoot blackportal footpeas going in different directions. \n\n</color>Fusion Formula : <color=#8B0000> (Peashooter + Chrono-Device) + (Gatling-Pea + Football Helmet) </color>");
+
+
+                    CustomLevelData PortalHelmetPeaLevelData = new CustomLevelData();
+                    PortalHelmetPeaLevelData.BgmType = MusicType.Day;
+                    PortalHelmetPeaLevelData.SceneType = SceneType.Day_6;
+                    PortalHelmetPeaLevelData.AdvBuffs = () =>
+                    {
+                        var list = new List<int>();
+                        list.Add(PortalHelmetGatling.buff1);
+                        list.Add(PortalHelmetGatling.buff2);
+                        list.Add(9);
+                        list.Add(16);
+                        list.Add(26);
+                        list.Add(27);
+                        list.Add(32);
+                        return list;
+                    };
+                    PortalHelmetPeaLevelData.PreSelectCards = () =>
+                    {
+                        var list = new List<PlantType>();
+                        list.Add((PlantType)840);
+                        list.Add((PlantType)1208);
+                        list.Add((PlantType)1306);
+                        return list;
+                    };
+                    PortalHelmetPeaLevelData.ZombieList = () =>
+                    {
+                        var list = new List<ZombieType>();
+                        list.Add(ZombieType.NormalZombie);
+                        list.Add(ZombieType.ConeZombie);
+                        list.Add(ZombieType.BucketZombie);
+                        list.Add(ZombieType.FootballZombie);
+                        list.Add(ZombieType.TallNutFootballZombie);
+                        list.Add(ZombieType.FootballDrown);
+                        list.Add(ZombieType.BlackFootball_a);
+                        list.Add(ZombieType.BlackFootball_b);
+                        list.Add(ZombieType.BlackFootball_c);
+                        list.Add(ZombieType.UltimateFootballZombie);
+                        list.Add(ZombieType.FlagFootball);
+                        list.Add(ZombieType.ProtalZombie);
+                        return list;
+                    };
+                    PortalHelmetPeaLevelData.ZombieHealthRate = () => (2);
+                    PortalHelmetPeaLevelData.WaveCount = () => (40);
+                    PortalHelmetPeaLevelData.Logo = previewObj.GetComponent<SpriteRenderer>().sprite;
+                    PortalHelmetPeaLevelData.Name = () => ("Cosmic Quarterback \nShowcase");
+                    PortalHelmetPeaLevelData.RowCount = 6;
+
+                    var bTag = default(Board.BoardTag);
+                    bTag.enableTravelPlant = true;
+                    PortalHelmetPeaLevelData.BoardTag = bTag;
+                    CustomCore.RegisterCustomLevel(PortalHelmetPeaLevelData);
+                }
+            }
             if (StargloomAssetBundle == null)
             {
                 MelonLogger.Msg("Missing Star Gloom's Bundle");
@@ -259,13 +689,14 @@ namespace AMRaileds_Custom_Plants
                     { (1071, 817), (817, 1071), (837, 1070) }, 1.9f, 0f, 120, 300, 30f, 575);
                     CustomCore.TypeMgrExtra.IsFirePlant.Add((PlantType)823);
                     CustomCore.AddUltimatePlant((PlantType)823);
-                    CustomCore.RegisterCustomParticle((ParticleType)118, particleObj);
+                    CustomCore.RegisterCustomParticle((ParticleType)200, particleObj);
                     SuperFireGloom.buff1 = CustomCore.RegisterCustomBuff("Hellfire Gloom : Heatwave deals double damage and the penalty for distance is heavily decreased by 76%", BuffType.AdvancedBuff, () => (true), 3500, default, (PlantType)823);
                     SuperFireGloom.buff2 = CustomCore.RegisterCustomBuff("Hellfire Gloom : Every shot gives a frenzy point. Upon reaching 36 points it boosts damage for 8 seconds. Cannot gain frenzy points with boosted attacks.", BuffType.AdvancedBuff, () => (true), 3500, default, (PlantType)823);
                     CustomCore.AddPlantAlmanacStrings(823, "Hellfire Gloom-shroom", "(@theoneandonly30) A beast that is easily capable of defeating hordes of weak zombies.\n\n<color=#3D1400>Damage: </color><color=#8B0000>120*4/1.9 second</color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Attack inflict enflamed and ember.\n<color=black>•</color> Every 12th shot releases a heatwave which deals 900 damage (scales based on distance.) and applies the ember effect to all zombies on the lawn.\n\n<color=black>Odyssey Modifiers: </color><color=#8B0000>\n<color=black>•</color> Hellwave : Heatwave deals double damage and the penalty for distance is heavily decreased by 76% \n<color=black>•</color> Superfrenzy : Every shot gives a frenzy point. Upon reaching 36 points it boosts damage for 8 seconds. Cannot gain frenzy points with boosted attacks. \n\n</color><size=36>Fusion Formula : <color=#8B0000>(Gloom-Shroom + Jalapeno) + (Fume-Shroom + Jalapeno + Doom-Shroom)</color>");
 
+
+                    CustomLevelData SuperFireGloomLevelData = new CustomLevelData();
                     SuperFireGloomLevelData.BgmType = MusicType.Night;
-                    SuperFireGloomLevelData.ID = 2;
                     SuperFireGloomLevelData.SceneType = SceneType.Night_6;
                     SuperFireGloomLevelData.AdvBuffs = () =>
                     {
@@ -304,17 +735,17 @@ namespace AMRaileds_Custom_Plants
                         list.Add(ZombieType.CherryPaperZ95);
                         return list;
                     };
-                    SuperFireGloomLevelData.WaveCount = () => (2);
+                    SuperFireGloomLevelData.WaveCount = () => (30);
                     SuperFireGloomLevelData.Logo = previewObj.GetComponent<SpriteRenderer>().sprite;
                     SuperFireGloomLevelData.Name = () => ("Hellfire Gloom \nShroom Showcase");
                     SuperFireGloomLevelData.RowCount = 6;
 
-                    var bTag = new Board.BoardTag();
+                    var bTag = default(Board.BoardTag);
                     bTag.isNight = true;
                     bTag.enableAllTravelPlant = true;
                     bTag.enableTravelPlant = true;
                     SuperFireGloomLevelData.BoardTag = bTag;
-                    //CustomCore.RegisterCustomLevel(SuperFireGloomLevelData);
+                    CustomCore.RegisterCustomLevel(SuperFireGloomLevelData);
                 }
             }
 
@@ -334,7 +765,7 @@ namespace AMRaileds_Custom_Plants
                     { (823, 23), (23, 823) }, .5f, 0f, 20, 300, 30f, 425);
                     CustomCore.TypeMgrExtra.IsFirePlant.Add((PlantType)837);
                     CustomCore.AddUltimatePlant((PlantType)837);
-                    CustomCore.AddPlantAlmanacStrings(837, "Hellfire Star", "(@theoneandonly30) Shoots deadly doomfire stars.\n\n<color=#3D1400>Damage: </color><color=#8B0000>360*5/0.5 seconds</color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Shoots 5 stars which inflict ember and enflamed effect.\n<color=black>•</color> Heatwave is replaced by a doom meteor.\n\n</color><size=36>Fusion Formula : <color=#8B0000>Gloom-Shroom + Starfruit</color>");
+                    CustomCore.AddPlantAlmanacStrings(837, "Hellfire Star", "(@theoneandonly30) Shoots deadly doomfire stars.\n\n<color=#3D1400>Damage: </color><color=#8B0000>360*5/0.5 seconds</color>\n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Shoots 5 stars which inflict ember and enflamed effect.\n<color=black>•</color> Heatwave damage is cut in half but every 2nd heatwave is accompanied by a doom star card.\n\n</color><size=36>Fusion Formula : <color=#8B0000>Gloom-Shroom + Starfruit</color>");
                 }
             }
 
@@ -351,7 +782,7 @@ namespace AMRaileds_Custom_Plants
                 {
                     MelonLogger.Msg("Successfully Loaded Pitcher Mystery's Asset Bundle");
                     CustomCore.RegisterCustomPlant<Plant, PitcherMystery>(835, prefabObj, previewObj, new List<(int, int)>
-                    {}, 1.9f, 0f, 80, 300, 7.5f, 125);
+                    { }, 1.9f, 0f, 80, 300, 7.5f, 125);
                     CustomCore.AddPlantAlmanacStrings(835, "Pitcher Mystery", "(@theoneandonly30) ???.");
                 }
             }
@@ -371,11 +802,15 @@ namespace AMRaileds_Custom_Plants
                     CustomCore.RegisterCustomPlant<DoomNut, TwinDoomNut>(838, prefabObj, previewObj, new List<(int, int)>
                     { (1236, 3), (3, 1236) }, 0f, 0f, 0, 4000, 30f, 300);
                     CustomCore.TypeMgrExtra.IsNut.Add((PlantType)838);
-                    CustomCore.AddPlantAlmanacStrings(838, "Twin Doom Nut", "(@theoneandonly30) Heals and kills. \n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Every 3 seconds every zombie near it receives (Ember Score*30) damage and knockbacks them by (Ember Score/10) tiles then they give them a single ember score, Then for every embered zombie near it the plant heals by 30 and then heal by 400. \n\n<color=#6f19bf>Ember Score: </color><color=#8B0000>\nUpon reaching 5 Ember Points apply Embered debuff to the affected zombie, Ember Points give advantages to certain doom plants and ember points can be given by certain doom plants. \n\n</color><size=36>Fusion Formula : <color=#8B0000>Doom Nut + Wall Nut</color>");
+                    CustomCore.TypeMgrExtra.UncrashablePlants.Add((PlantType)838);
+                    CustomCore.AddUltimatePlant((PlantType)838);
+                    TwinDoomNut.buff1 = CustomCore.RegisterCustomBuff("Twin Doom-Nut/Blover Doom-Nut : The attack range is significantly increased.", BuffType.AdvancedBuff, () => (true), 3500, default, (PlantType)838);
+                    TwinDoomNut.buff2 = CustomCore.RegisterCustomBuff("Twin Doom-Nut : Reduces the amount of Ember Points needed to apply the Ember debuff. Upon inflicting the Ember debuff through Ember Points, does a small explosion that deals 10 damage and spreads 2 Ember Points. This modifier affects all doom plants.", BuffType.AdvancedBuff, () => (true), 3500, default, (PlantType)838);
+                    CustomCore.AddPlantAlmanacStrings(838, "Twin Doom Nut", "(@theon0eandonly30) Does damage to a group of zombies and heals. \n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Has anti-crush properties. \n<color=black>•</color> Damage received capped at 50. \n<color=black>•</color> Every 3 seconds every zombie near it receives (Ember Score*30) damage and knockbacks them by (Ember Score/10) tiles then they give them a single ember score, Then for every embered zombie near it the plant heals by 20 and then heal by 400. \n\n<color=#6f19bf>Ember Score: </color><color=#8B0000>\nUpon reaching 5 Ember Points apply Embered debuff to the affected zombie, Ember Points give advantages to certain doom plants and ember points can be given by certain doom plants.\n\n<color=black>Odyssey Modifiers: </color><color=#8B0000>\n<color=black>•</color> Uncontained : The attack range is significantly increases. \n<color=black>•</color> Blooming Ember : Reduces the amount of Ember Points needed to apply the Ember debuff. Upon inflicting the Ember debuff through Ember Points, does a small explosion that deals 10 damage and spreads 2 Ember Points. This modifier affects all doom plants. \n\n</color><size=36>Fusion Formula : <color=#8B0000>Doom Nut + Wall Nut</color>");
                 }
 
+                CustomLevelData DoomsdayLevelData = new CustomLevelData();
                 DoomsdayLevelData.BgmType = MusicType.UltimateBattle;
-                DoomsdayLevelData.ID = 1;
                 DoomsdayLevelData.SceneType = SceneType.Night_6;
                 DoomsdayLevelData.NeedSelectCard = false;
                 DoomsdayLevelData.Logo = previewObj.GetComponent<SpriteRenderer>().sprite;
@@ -419,19 +854,20 @@ namespace AMRaileds_Custom_Plants
                     list.Add(ZombieType.BlueGargantuar);
                     return list;
                 };
-                DoomsdayLevelData.WaveCount = () => (1);
+                DoomsdayLevelData.WaveCount = () => (40);
 
-                var bTag = new Board.BoardTag();
+                var bTag = default(Board.BoardTag);
                 bTag.isNight = true;
                 bTag.isConvey = true;
                 bTag.isFreeCardSelect = false;
                 DoomsdayLevelData.BoardTag = bTag;
-                //CustomCore.RegisterCustomLevel(DoomsdayLevelData);
+                CustomCore.RegisterCustomLevel(DoomsdayLevelData);
 
+
+                CustomLevelData DoomsdayOdysseyLevelData = new CustomLevelData();
                 DoomsdayOdysseyLevelData = DoomsdayLevelData;
-                DoomsdayOdysseyLevelData.ID = 2;
                 DoomsdayOdysseyLevelData.Name = () => ("Doomsday! 2");
-                SuperFireGloomLevelData.AdvBuffs = () =>
+                DoomsdayOdysseyLevelData.AdvBuffs = () =>
                 {
                     var list = new List<int>();
                     list.Add(SuperFireGloom.buff1);
@@ -479,14 +915,14 @@ namespace AMRaileds_Custom_Plants
                     return list;
                 };
 
-                var bTag2 = new Board.BoardTag();
+                var bTag2 = default(Board.BoardTag);
                 bTag2.isNight = true;
                 bTag2.enableAllTravelPlant = true;
                 bTag2.enableTravelPlant = true;
                 bTag2.isConvey = true;
                 bTag2.isFreeCardSelect = false;
                 DoomsdayOdysseyLevelData.BoardTag = bTag2;
-                //CustomCore.RegisterCustomLevel(DoomsdayOdysseyLevelData);
+                CustomCore.RegisterCustomLevel(DoomsdayOdysseyLevelData);
             }
 
             if (DoomNutBloverAssetBundle == null)
@@ -505,7 +941,8 @@ namespace AMRaileds_Custom_Plants
                     { (838, 22), (22, 838) }, 0f, 0f, 0, 4000, 30f, 300);
                     CustomCore.TypeMgrExtra.IsNut.Add((PlantType)839);
                     CustomCore.TypeMgrExtra.FlyingPlants.Add((PlantType)839);
-                    CustomCore.AddPlantAlmanacStrings(839, "Doom Blover-Nut", "(@theoneandonly30) Heals and kills. \n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Every 4.5 seconds every zombie near it receives (Ember Score*15) damage and knockbacks them by (Ember Score/10) tiles (2 tile limit) then they give them a single ember score, Then for every embered zombie near it it will heal every plant below it by 25 and then heal by 400. \n</color><size=36>Fusion Formula : <color=#8B0000>Twin Doom Nut < Blover</color>");
+                    CustomCore.AddUltimatePlant((PlantType)839);
+                    CustomCore.AddPlantAlmanacStrings(839, "Doom Blover-Nut", "(@theoneandonly30) Heals and kills. \n\n<color=black>Specials: </color><color=#8B0000>\n<color=black>•</color> Every 4.5 seconds every zombie near it receives (Ember Score*15) damage and knockbacks them by (Ember Score/10) tiles (2 tile limit) then they give them a single ember score, Then for every embered zombie near it it will heal every plant below it by 35 and then heal by 400. \n</color><size=36>Fusion Formula : <color=#8B0000>Twin Doom Nut < Blover</color>");
                 }
             }
 
@@ -567,9 +1004,10 @@ namespace AMRaileds_Custom_Plants
                 if ((prefabObj != null) && (previewObj != null))
                 {
                     MelonLogger.Msg("Successfully Loaded Shrine's Asset Bundle");
-                    CustomCore.RegisterCustomPlant<Shooter, Shrine>(820, prefabObj, previewObj, new List<(int, int)>
+                    CustomCore.RegisterCustomPlant<Shooter, Shrine2>(820, prefabObj, previewObj, new List<(int, int)>
                     { }, 0.5f, 0f, 0, 1000, 30f, 725);
-                    CustomCore.AddPlantAlmanacStrings(820, "Shrine", "(@amrailed) Requires Sacrifice.\n\n<color=#3D1400>Damage: </color><color=#8B0000>200/0.5 second</color>\n\n<color=black>Special's: </color><color=#8B0000>\n<color=black>•</color> Clicking with LMB cycles through its modes (Execute, Slice, Heal, Illuminate).\n<color=black>•</color> Clicking with RMB triggers the mode and sacrifices plants in a 3x3 area. Only accepts Advanced Plants (+1 Score) and Odyssey Plants (+3 Score)\n\n<color=black>Modes: </color><color=#8B0000>\n<color=black>•</color> Execute : Instantly kills (score) of the strongest zombies.\n<color=black>•</color> Slice : Deals (540*score) damage to all zombies.\n<color=black>•</color> Heal : Recovers (300*score + (5% of the plant being healed max toughness)*score) HP to all plants on the lawn.\n<color=black>•</color> Illuminate : Generates (25*score) sun from every zombie.\r\n\n</color><size=36>Cost : <color=#8B0000>725</color>\n</color><size=36>Recharge : <color=#8B0000>30 secs</color>");
+                    //CustomCore.AddPlantAlmanacStrings(820, "Shrine", "(@amrailed) Requires Sacrifice.\n\n<color=#3D1400>Damage: </color><color=#8B0000>200/0.5 second</color>\n\n<color=black>Special's: </color><color=#8B0000>\n<color=black>•</color> Clicking with LMB cycles through its modes (Execute, Slice, Heal, Illuminate).\n<color=black>•</color> Clicking with RMB triggers the mode and sacrifices plants in a 3x3 area. Only accepts Advanced Plants (+1 Score) and Odyssey Plants (+3 Score)\n\n<color=black>Modes: </color><color=#8B0000>\n<color=black>•</color> Execute : Instantly kills (score) of the strongest zombies.\n<color=black>•</color> Slice : Deals (540*score) damage to all zombies.\n<color=black>•</color> Heal : Recovers (300*score + (5% of the plant being healed max toughness)*score) HP to all plants on the lawn.\n<color=black>•</color> Illuminate : Generates (25*score) sun from every zombie.\r\n\n</color><size=36>Cost : <color=#8B0000>725</color>\n</color><size=36>Recharge : <color=#8B0000>30 secs</color>");
+                    CustomCore.AddPlantAlmanacStrings(820, "Shrine", "(@amrailed) Requires Sacrifice.\n\n<color=#3D1400>Damage: </color><color=#8B0000>(200-900)/0.5 second</color>\n\n<color=black>•</color> Clicking on it sacrifices all plants in a 3x3 area. For each 200 hp the plant sacrificed has, does these things : Heals all plants by 15, all zombies take 5 damage, increases aura damage by 2 (permanent, 900 limit), temporarily increases aura damage by 10 (temporary, slowly decays into 0, no limits).\n\n<color=black>•</color> Upon taking damage, Release a scream for 1 second that does : 0.4 tiles of knockback and 0.1 tile of true knockback, applies to cold effect, and deals 20 damage. every 0.1 second the scream is active. \r\n\n</color><size=36>Cost : <color=#8B0000>725</color>\n</color><size=36>Recharge : <color=#8B0000>30 secs</color>");
                 }
             }
 
@@ -902,7 +1340,7 @@ namespace AMRaileds_Custom_Plants
                         new ValueTuple<int, int>(1, 10),
                         new ValueTuple<int, int>(10, 1),
                     }, 25f, 25f, 20, 300, 50f, 125);
-                    CustomCore.AddPlantAlmanacStrings(801, "Snowflower", "(@amrailed) Freezes the screen multiple times!\n\n<color=black>Special: </color><color=#8B0000>\n<color=black>•</color> When a sunny bullet passes through it consumes it and turns it into 1 point, when it gains 20 points generate an Ice-Shroom infront of her, if the grid is already occupied then attempt to fuse with the plant infront, if it cant does not do anything.\n\n</color><size=36>Fusion Formula: <color=#8B0000>Sunflower + Ice-Shroom</color>");
+                    CustomCore.AddPlantAlmanacStrings(801, "Snowflower", "(@amrailed) Freezes the screen multiple times!\n\n<color=black>Special: </color><color=#8B0000>\n<color=black>•</color> When a sunny bullet passes through it consumes it and turns it into 1 point, when it gains 20 points generate an Ice-Shroom card. Passively gains 1 point every second\n\n</color><size=36>Fusion Formula: <color=#8B0000>Sunflower + Ice-Shroom</color>");
                 }
             }
 
@@ -923,7 +1361,7 @@ namespace AMRaileds_Custom_Plants
                         new ValueTuple<int, int>(1, 16),
                         new ValueTuple<int, int>(16, 1),
                     }, 25f, 25f, 20, 300, 50f, 175);
-                    CustomCore.AddPlantAlmanacStrings(802, "Blazeflower", "(@amrailed) Burns the screen multiple times!\n\n<color=black>Special: </color><color=#8B0000>\n<color=black>•</color> When a sunny bullet passes through it consumes it and turns it into 1 point, when it gains 20 points generate a Jalapeno infront of her, if the grid is already occupied then attempt to fuse with the plant infront, if it cant does not do anything.\n\n</color><size=36>Fusion Formula: <color=#8B0000>Sunflower + Jalapeno</color>");
+                    CustomCore.AddPlantAlmanacStrings(802, "Blazeflower", "(@amrailed) Burns the screen multiple times!\n\n<color=black>Special: </color><color=#8B0000>\n<color=black>•</color> When a sunny bullet passes through it consumes it and turns it into 1 point, when it gains 20 points generate a Jalapeno card. Passively gains 1 point every second\n\n</color><size=36>Fusion Formula: <color=#8B0000>Sunflower + Jalapeno</color>");
                 }
             }
 
@@ -1491,12 +1929,12 @@ namespace AMRaileds_Custom_Plants
                     CustomCore.RegisterCustomPlant<UltimateFume, VolcanoShroom>(268, prefabObj, previewObj, new List<(int, int)>
                     { (817, 818), (818, 817)}, 0.5f, 0f, 225, 300, 30f, 525);
                     CustomCore.AddUltimatePlant((PlantType)268);
-                    VolcanoShroom.buff1 = CustomCore.RegisterCustomBuff("Volcanic Ash : Every 0.5 seconds it will generate an explosion with 1/5th of the base damage with a 3x3 range it will also spread the enflamed effect.", BuffType.AdvancedBuff, ()=>true, 5000, default, (PlantType)268);
+                    VolcanoShroom.buff1 = CustomCore.RegisterCustomBuff("Volcanic Ash : Every 0.5 seconds it will generate an explosion with 1/5th of the base damage with a 3x3 range it will also spread the enflamed effect.", BuffType.AdvancedBuff, () => true, 5000, default, (PlantType)268);
                     VolcanoShroom.buff2 = CustomCore.RegisterCustomBuff("Stream of Death : Base damage is increased to 125", BuffType.AdvancedBuff, () => true, 5000, default, (PlantType)268);
-                    printString("Volcano Shroom Buff 1 registered as "+(VolcanoShroom.buff1).ToString());
+                    printString("Volcano Shroom Buff 1 registered as " + (VolcanoShroom.buff1).ToString());
                     printString("Volcano Shroom Buff 2 registered as " + (VolcanoShroom.buff2).ToString());
                     CustomCore.AddPlantAlmanacStrings(268, "Volcano Shroom", "(@amrailed) Shoots deadly fireballs that scorches zombie.\n\n<color=#3D1400>Damage: </color><color=#8B0000>50/0.1 seconds</color>\n\n<color=black>Special's: </color><color=#8B0000>\n<color=black>•</color> Attacks inflict the enflamed and ember effect to every zombie in the same row as it.\n<color=black>•</color> Has a 40% chance to transfigure zombies (with < 50% Max HP) into hypnotized jalapeno zombies.\n\n<color=black>Odyssey Modifier's: </color><color=#8B0000>\n<color=black>•</color> Volcanic Ash : Every 0.5 seconds it will generate an explosion with 1/5th of the base damage with a 3x3 range it will also spread the enflamed effect.\n<color=black>•</color> Stream Of Death : Base damage is increased to 125.\n\n</color><size=36>Fusion Formula : <color=#8B0000>Magma-Shroom + Scorchip-Shroom</color>");
-                }   
+                }
             }
             if (UmbrellaMineAssetBundle == null)
             {
@@ -1520,6 +1958,21 @@ namespace AMRaileds_Custom_Plants
 
             // -- Zombies - \\
 
+            /*if (DeathcatcherAssetBundle == null)
+            {
+                MelonLogger.Msg("Missing Deathcatcher Zombie's Bundle");
+            }
+            else
+            {
+                GameObject prefabObj = ResourceLoader.GetResourceFromBundle(DeathcatcherAssetBundle, "Deathcatcher");
+
+                if ((prefabObj != null))
+                {
+                    MelonLogger.Msg("Successfully Loaded Deathcatcher Zombie's Asset Bundle");
+                    CustomCore.RegisterCustomZombie<Zombie, Deathcatcher>((ZombieType)256, prefabObj, 300, 0, 90000, 0, 0);
+                    CustomCore.AddZombieAlmanacStrings(256, "Deathcatcher", "<size=36>Revives zombies from the dead in a weaker form.\n\n<color=black>Toughness: </color><color=#4B0082>Cannot be killed by projectiles</color>");
+                }
+            }*/
             if (HypnoPaperZombieAssetBundle == null)
             {
                 MelonLogger.Msg("Missing Hypno Paper Zombie's Bundle");
@@ -1548,713 +2001,370 @@ namespace AMRaileds_Custom_Plants
                 {
                     MelonLogger.Msg("Successfully Loaded Fire Claw Zombie's Asset Bundle");
                     CustomCore.RegisterCustomZombie<Zombie, FireClawZombie>((ZombieType)254, prefabObj, 300, 1000, 1500, 8000, 0);
-                    CustomCore.AddZombieAlmanacStrings(254, "Scorch Tall-Nut Sentinel Zombie", "<size=36>Deals ten times damage to plants..\n\n<color=black>Damage: </color><color=#4B0082>1000 / 0.5 Seconds (bite)</color>\n<color=black>Toughness: </color><color=#4B0082>1500+8000 (Type I)</color>");
+                    CustomCore.AddZombieAlmanacStrings(254, "Scorch Tall-Nut Sentinel Zombie", "<size=36>Deals ten times damage to plants.\n\n<color=black>Damage: </color><color=#4B0082>1000 / 0.5 Seconds (bite)</color>\n<color=black>Toughness: </color><color=#4B0082>1500+8000 (Type I)</color>");
+                }
+            }
+            CustomLevelData BossRushLevelData = new CustomLevelData();
+            BossRushLevelData.BgmType = MusicType.Boss;
+            BossRushLevelData.SceneType = SceneType.Day;
+            BossRushLevelData.AdvBuffs = () =>
+            {
+                var list = new List<int>();
+                list.Add(16);
+                list.Add(13);
+                list.Add(27);
+                list.Add(32);
+                return list;
+            };
+            BossRushLevelData.ConveyBeltPlantTypes = () =>
+            {
+                var list = new List<PlantType>();
+                return list;
+            };
+            BossRushLevelData.ZombieList = () =>
+            {
+                List<ZombieType> ZombieList = new List<ZombieType>();
+                ZombieList.Add(ZombieType.SnowShieldZombie);
+                ZombieList.Add(ZombieType.SnowGunZombie);
+                ZombieList.Add(ZombieType.SnowDrownZombie);
+
+                ZombieList.Add(ZombieType.FootballZombie);
+                ZombieList.Add(ZombieType.TallNutFootballZombie);
+                ZombieList.Add(ZombieType.FlagFootball);
+                ZombieList.Add(ZombieType.FootballDolphin);
+                ZombieList.Add(ZombieType.GatlingFootballZombie);
+                return ZombieList;
+            };
+            //BossRushLevelData.ConveyBeltPlantTypes = () => (Plugin.BossRushOdysseyPlantList);
+            BossRushLevelData.WaveCount = () => (40);
+            BossRushLevelData.Logo = BossRushLogo;
+            BossRushLevelData.Name = () => ("Boss Rush");
+            BossRushLevelData.RowCount = 5;
+            BossRushLevelData.NeedSelectCard = false;
+
+            var bTagBR = default(Board.BoardTag);
+            bTagBR.enableAllTravelPlant = true;
+            bTagBR.enableTravelPlant = true;
+            bTagBR.isFreeCardSelect = false;
+            bTagBR.disableNormalSun = true;
+            bTagBR.disableMower = true;
+            bTagBR.isConvey = true;
+            BossRushLevelData.BoardTag = bTagBR;
+            Plugin.BossRushLevelID = CustomCore.RegisterCustomLevel(BossRushLevelData);
+        }
+    }
+
+    [HarmonyPatch(typeof(Chomper))]
+    public static class ChomperPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch("Chomp")]
+        public static void ChompFix(Chomper __instance, Zombie zombie)
+        {
+            if (__instance.thePlantType == (PlantType)833)
+            {
+                Board.Instance.CreateFreeze(__instance.transform.position);
+            }
+            if (__instance.thePlantType == (PlantType)834)
+            {
+                Board.Instance.CreateFireLine(__instance.thePlantRow);
+            }
+            if (__instance.thePlantType == (PlantType)263)
+            {
+                Board.Instance.CreateFreeze(__instance.transform.position);
+                Board.Instance.CreateFireLine(__instance.thePlantRow);
+                __instance.swallowMaxCountDown = 0.1f;
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch("BiteEvent")]
+        public static void BiteEvent(Chomper __instance)
+        {
+            var pos = __instance.transform.position;
+            var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + 1.1f), 2f);
+            foreach (var z in array)
+            {
+                if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie))
+                {
+                    if (__instance.thePlantType == (PlantType)833)
+                    {
+                        zombie.SetCold(6);
+                    }
+                    if (__instance.thePlantType == (PlantType)834)
+                    {
+                        zombie.SetJalaed();
+                    }
+                    if (__instance.thePlantType == (PlantType)263)
+                    {
+                        UnityEngine.Vector3 position = __instance.transform.position;
+                        Bullet bullet = Board.Instance.GetComponent<CreateBullet>().SetBullet(position.x + 0.1F, position.y + 1.1f, __instance.thePlantRow, BulletType.Bullet_steelPea, 0);
+
+                        bullet.Damage = 600;
+                        bullet.normalSpeed = (new System.Random()).Next(10, 15);
+                        bullet.theBulletRow = __instance.thePlantRow;
+                    }
                 }
             }
         }
 
-
-        [HarmonyPatch(typeof(CabbageUmbrella), "BlockEffect")]
-        public static class CabbageUmbrellaPatch
+        [HarmonyPatch(typeof(SuperSnowGatling))]
+        public class SuperSnowGatlingPatch
         {
-            public static bool Prefix(CabbageUmbrella __instance, ref Zombie zombie)
+            [HarmonyPostfix]
+            [HarmonyPatch("GetBulletType")]
+            public static void PostGetBulletType(SuperSnowGatling __instance, ref BulletType __result)
             {
-                return FrostUmbrella.SBlockEffect(__instance, ref zombie) && UmbrellaMine.SBlockEffect(__instance, ref zombie);
+                if (__instance.thePlantType == (PlantType)806)
+                {
+                    __result = BulletType.Bullet_smallSun;
+                }
+                else if (__instance.thePlantType == (PlantType)814)
+                {
+                    __result = BulletType.Bullet_puffPotato;
+                }
             }
-        }
-
-        [HarmonyPatch(typeof(Chomper))]
-        public static class ChomperPatch
-        {
             [HarmonyPrefix]
-            [HarmonyPatch("Chomp")]
-            public static void ChompFix(Chomper __instance, Zombie zombie)
+            [HarmonyPatch("SuperShoot")]
+            public static bool PreSuperShoot(SuperSnowGatling __instance, ref float angle, ref float speed, ref float x, ref float y)
             {
-                if (__instance.thePlantType == (PlantType)833)
+                if (__instance.thePlantType == (PlantType)806)
                 {
-                    Board.Instance.CreateFreeze(__instance.transform.position);
+                    var b = CreateBullet.Instance.SetBullet(x, y, __instance.thePlantRow, BulletType.Bullet_smallSun, 15);
+                    b.transform.Rotate(0, 0, angle);
+                    b.normalSpeed = speed;
+                    return false;
                 }
-                if (__instance.thePlantType == (PlantType)834)
+                if (__instance.thePlantType == (PlantType)814)
                 {
-                    Board.Instance.CreateFireLine(__instance.thePlantRow);
-                }
-                if (__instance.thePlantType == (PlantType)263)
-                {
-                    Board.Instance.CreateFreeze(__instance.transform.position);
-                    Board.Instance.CreateFireLine(__instance.thePlantRow);
-                    __instance.swallowMaxCountDown = 0.1f;
-                }
-            }
-
-            [HarmonyPrefix]
-            [HarmonyPatch("BiteEvent")]
-            public static void BiteEvent(Chomper __instance)
-            {
-                var pos = __instance.transform.position;
-                var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + 1.1f), 2f);
-                foreach (var z in array)
-                {
-                    if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie))
-                    {
-                        if (__instance.thePlantType == (PlantType)833)
-                        {
-                            zombie.SetCold(6);
-                        }
-                        if (__instance.thePlantType == (PlantType)834)
-                        {
-                            zombie.SetJalaed();
-                        }
-                        if (__instance.thePlantType == (PlantType)263)
-                        {
-                            UnityEngine.Vector3 position = __instance.transform.position;
-                            Bullet bullet = Board.Instance.GetComponent<CreateBullet>().SetBullet(position.x + 0.1F, position.y + 1.1f, __instance.thePlantRow, BulletType.Bullet_steelPea, 0);
-
-                            bullet.Damage = 600;
-                            bullet.normalSpeed = (new System.Random()).Next(10, 15);
-                            bullet.theBulletRow = __instance.thePlantRow;
-                        }
-                    }
-                }
-            }
-
-            [HarmonyPatch(typeof(SuperSnowGatling))]
-            public class SuperSnowGatlingPatch
-            {
-                [HarmonyPostfix]
-                [HarmonyPatch("GetBulletType")]
-                public static void PostGetBulletType(SuperSnowGatling __instance, ref BulletType __result)
-                {
-                    if (__instance.thePlantType == (PlantType)806)
-                    {
-                        __result = BulletType.Bullet_smallSun;
-                    }
-                    else if (__instance.thePlantType == (PlantType)814)
-                    {
-                        __result = BulletType.Bullet_puffPotato;
-                    }
-                }
-                [HarmonyPrefix]
-                [HarmonyPatch("SuperShoot")]
-                public static bool PreSuperShoot(SuperSnowGatling __instance, ref float angle, ref float speed, ref float x, ref float y)
-                {
-                    if (__instance.thePlantType == (PlantType)806)
-                    {
-                        var b = CreateBullet.Instance.SetBullet(x, y, __instance.thePlantRow, BulletType.Bullet_smallSun, 15);
-                        b.transform.Rotate(0, 0, angle);
-                        b.normalSpeed = speed;
-                        return false;
-                    }
-                    if (__instance.thePlantType == (PlantType)814)
-                    {
-                        var b = CreateBullet.Instance.SetBullet(x, y, __instance.thePlantRow, BulletType.Bullet_puffPotato, 15);
-                        b.transform.Rotate(0, 0, angle);
-                        b.normalSpeed = speed;
-                        return false;
-                    }
-                    return true;
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(WallNut), "TakeDamage")]
-        public static class WallNutPatch
-        {
-            public static void Prefix(WallNut __instance, int damage, int damageType)
-            {
-                if (__instance.thePlantType == (PlantType)808)
-                {
-                    UnityEngine.Vector3 pos = __instance.transform.position + new UnityEngine.Vector3(0.8f, 1.1f);
-                    Bullet bullet = Board.Instance.GetComponent<CreateBullet>().SetBullet(pos.x, pos.y, __instance.thePlantRow, BulletType.Bullet_superCherry, 0);
-                    bullet.Damage = (int)Il2CppSystem.Math.Floor(((float)damage) / 2);
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(Bullet_silverMelon))]
-        public static class Bullet_silverMelonPatch
-        {
-            [HarmonyPrefix]
-            [HarmonyPatch("HitZombie")]
-            public static void PreHitZombie(Bullet_silverMelon __instance, Zombie zombie)
-            {
-                if (__instance is not null && __instance.theBulletType == BulletType.Bullet_goldMelon && __instance.Damage == 140)
-                {
-                    var pos = __instance.transform.position;
-                    var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y), 1f);
-                    foreach (var z in array)
-                    {
-                        if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var tzombie))
-                        {
-                            if (tzombie.theZombieRow == __instance.theBulletRow || tzombie.theZombieRow == __instance.theBulletRow + 1 || tzombie.theZombieRow == __instance.theBulletRow - 1)
-                            {
-                                tzombie.AddfreezeLevel(10);
-                                tzombie.SetCold(8);
-                                CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(tzombie.transform.position.x), tzombie.theZombieRow, 38, 0);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(Bullet_winterMelon))]
-        public static class Bullet_winterMelonPatch
-        {
-            [HarmonyPrefix]
-            [HarmonyPatch("HitZombie")]
-            public static void PreHitZombie(Bullet_silverMelon __instance, Zombie zombie)
-            {
-                if (__instance is not null && __instance.theBulletType == BulletType.Bullet_winterMelon && __instance.Damage == 300)
-                {
-                    if (Lawnf.TravelAdvanced(Hybrid_Melon.buff1))
-                    {
-                        CreatePlant.Instance.SetPlant(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, (PlantType)266);
-                        if ((new System.Random()).Next(1, 5) <= 1)
-                        {
-                            GameObject success = null;
-                            for (int x = -1; x < 2; x++)
-                            {
-                                for (int y = -1; y < 2; y++)
-                                {
-                                    success = CreatePlant.Instance.SetPlant(Mouse.Instance.GetColumnFromX(zombie.transform.position.x) + x, zombie.theZombieRow + y, (PlantType)266);
-                                    if (success is not null) { break; }
-                                }
-                                if (success is not null) { break; }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        CreatePlant.Instance.SetPlant(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, (PlantType)266);
-                    }
-                }
-            }
-        }
-        [HarmonyPatch(typeof(Bullet_cannon))]
-        public static class Bullet_cannonPatch
-        {
-            [HarmonyPrefix]
-            [HarmonyPatch("HitLand")]
-            public static bool PreHitLand(Bullet_cannon __instance)
-            {
-                if (__instance.theBulletType == BulletType.Bullet_goldMelonCannon && __instance.Damage == 240)
-                {
-                    CreateParticle.SetParticle(71, new(__instance.cannonPos.x, __instance.cannonPos.y), __instance.theBulletRow);
-                    var pos = __instance.transform.position;
-                    LayerMask layermask = __instance.zombieLayer.m_Mask;
-                    var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y), 1f);
-                    foreach (var z in array)
-                    {
-                        if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie) && !zombie.isMindControlled)
-                        {
-                            if (Lawnf.TravelAdvanced(MelonadeMortar.buff2) && zombie.GetTotalHealth() <= 1200)
-                            {
-                                zombie.TakeDamage(DmgType.IceShieldless, 5000);
-                            }
-                            zombie.TakeDamage(DmgType.IceAll, 240);
-                            zombie.AddfreezeLevel(10);
-                            zombie.SetCold(8);
-                            if ((new System.Random()).Next(1, 4) <= 1)
-                            {
-                                CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 39, 0);
-
-                            }
-                            else
-                            {
-                                CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 38, 0);
-                            }
-                        }
-                    }
-                    GameAPP.PlaySound(UnityEngine.Random.RandomRangeInt(104, 106));
-                    __instance.Die();
+                    var b = CreateBullet.Instance.SetBullet(x, y, __instance.thePlantRow, BulletType.Bullet_puffPotato, 15);
+                    b.transform.Rotate(0, 0, angle);
+                    b.normalSpeed = speed;
                     return false;
                 }
                 return true;
             }
         }
-        [HarmonyPatch(typeof(CherryBomb))]
-        public static class CherryBombPatch
-        {
-            [HarmonyPrefix]
-            [HarmonyPatch("Bomb")]
-            public static void PreBomb(CherryBomb __instance)
-            {
-                if (__instance.thePlantType == (PlantType)809)
-                {
-                    var pos = __instance.transform.position;
-                    var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .8f), 3f);
-                    foreach (var z in array)
-                    {
-                        if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie) && (zombie.theZombieRow == __instance.thePlantRow || zombie.theZombieRow == __instance.thePlantRow + 1 || zombie.theZombieRow == __instance.thePlantRow - 1))
-                        {
-                            zombie.TakeDamage(DmgType.NormalAll, (int)(Board.Instance.theTotalNumOfCoin / 10));
-                            if ((new System.Random()).Next(1, 4) <= 1)
-                            {
-                                CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 39, 0);
+    }
 
-                            }
-                            else
-                            {
-                                CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 38, 0);
-                            }
-                        }
-                    }
-                }
-                else if (__instance.thePlantType == (PlantType)811)
-                {
-                    var pos = __instance.transform.position;
-                    var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .8f), 3f);
-                    foreach (var z in array)
-                    {
-                        if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie) && (zombie.theZombieRow == __instance.thePlantRow || zombie.theZombieRow == __instance.thePlantRow + 1 || zombie.theZombieRow == __instance.thePlantRow - 1))
-                        {
-                            for (int i = 0; i < 9; i++)
-                            {
-                                zombie.AddPoisonLevel();
-                            }
-                            zombie.Garliced();
-                        }
-                    }
-                }
+    [HarmonyPatch(typeof(WallNut), "TakeDamage")]
+    public static class WallNutPatch
+    {
+        public static void Prefix(WallNut __instance, int damage, int damageType)
+        {
+            if (__instance.thePlantType == (PlantType)808)
+            {
+                UnityEngine.Vector3 pos = __instance.transform.position + new UnityEngine.Vector3(0.8f, 1.1f);
+                Bullet bullet = Board.Instance.GetComponent<CreateBullet>().SetBullet(pos.x, pos.y, __instance.thePlantRow, BulletType.Bullet_superCherry, 0);
+                bullet.Damage = (int)Il2CppSystem.Math.Floor(((float)damage) / 2);
             }
         }
-        [HarmonyPatch(typeof(Bullet_silverCoin))]
-        public static class GoldCoinPatch
+    }
+
+    [HarmonyPatch(typeof(CherryBomb))]
+    public static class CherryBombPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch("Bomb")]
+        public static void PreBomb(CherryBomb __instance)
         {
-            [HarmonyPrefix]
-            [HarmonyPatch("HitZombie")]
-            public static void PreHitZombie(Bullet_silverCoin __instance, Zombie zombie)
+            if (__instance.thePlantType == (PlantType)809)
             {
-                if (__instance.Damage == 8713)
+                var pos = __instance.transform.position;
+                var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .8f), 3f);
+                foreach (var z in array)
                 {
-                    __instance.Damage = 500 + Mathf.FloorToInt(Board.Instance.theMoney / 100);
-                    if (Lawnf.TravelAdvanced(GoldenTycoonGatling.buff1))
+                    if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie) && (zombie.theZombieRow == __instance.thePlantRow || zombie.theZombieRow == __instance.thePlantRow + 1 || zombie.theZombieRow == __instance.thePlantRow - 1))
                     {
-                        __instance.Damage = 500 + Mathf.FloorToInt(Board.Instance.theMoney / 100) + Mathf.FloorToInt(Board.Instance.theSun / 100);
-                    }
-                    if (Lawnf.TravelAdvanced(GoldenTycoonGatling.buff2))
-                    {
-                        CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 39, 0);
-                        if (Lawnf.TravelAdvanced(GoldenTycoonGatling.buff1))
+                        zombie.TakeDamage(DmgType.NormalAll, (int)(Board.Instance.theTotalNumOfCoin / 10));
+                        if ((new System.Random()).Next(1, 4) <= 1)
                         {
-                            CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 0, 0);
-                        }
-                    }
-                }
-            }
-        }
-        [HarmonyPatch(typeof(Bullet_firePea_purple))]
-        public static class Bullet_firePea_purplePatch
-        {
-            [HarmonyPostfix]
-            [HarmonyPatch("HitZombie")]
-            public static void PostHitZombie(Bullet_firePea_purple __instance, Zombie zombie)
-            {
-                if (__instance.Damage == 60)
-                {
-                    if (zombie.isJalaed)
-                    {
-                        if ((new System.Random()).Next(1, 3) == 1)
-                        {
-                            Bullet bullet = CreateBullet.Instance.SetBullet(__instance.transform.position.x, __instance.transform.position.y, __instance.theBulletRow + 1, BulletType.Bullet_firePea_purple, BulletMoveWay.Three_down);
+                            CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 39, 0);
+
                         }
                         else
                         {
-                            Bullet bullet = CreateBullet.Instance.SetBullet(__instance.transform.position.x, __instance.transform.position.y, __instance.theBulletRow - 1, BulletType.Bullet_firePea_purple, BulletMoveWay.Three_up);
+                            CreateItem.Instance.SetCoin(Mouse.Instance.GetColumnFromX(zombie.transform.position.x), zombie.theZombieRow, 38, 0);
                         }
                     }
-                    zombie.AddEmberScore();
-                    zombie.SetJalaed();
                 }
             }
-        }
-        /*[HarmonyPatch(typeof(LaserUmbrella))]
-        public static class LaserUmbrellaPatch
-        {
-            [HarmonyPostfix]
-            [HarmonyPatch("Connected")]
-            public static void PostConnect(LaserUmbrella __instance, Plant plant)
+            else if (__instance.thePlantType == (PlantType)811)
             {
-                if (__instance.lightBall is not null)
+                var pos = __instance.transform.position;
+                var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .8f), 3f);
+                foreach (var z in array)
                 {
-                    Plugin.printString(__instance.lightBall.name);
-                    Plugin.printString(__instance.lightBall.transform.parent.name);
-                }
-            }
-        }*/
-        [HarmonyPatch(typeof(Bullet_cabbage))]
-        public static class Bullet_cabbagePatch
-        {
-            [HarmonyPostfix]
-            [HarmonyPatch("HitZombie")]
-            public static void PostHitZombie(Bullet_cabbage __instance, Zombie zombie)
-            {
-                if (__instance.Damage == 60)
-                {
-                    var pos = __instance.transform.position;
-                    var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .2f), .4f);
-                    foreach (var z in array)
+                    if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie) && (zombie.theZombieRow == __instance.thePlantRow || zombie.theZombieRow == __instance.thePlantRow + 1 || zombie.theZombieRow == __instance.thePlantRow - 1))
                     {
-                        if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var ozom) && ozom.theZombieRow == __instance.theBulletRow)
+                        for (int i = 0; i < 9; i++)
                         {
-                            if (ozom.isJalaed is true)
-                            {
-                                ozom.JalaedExplode(false, 20);
-                            }
-                            ozom.SetJalaed();
+                            zombie.AddPoisonLevel();
                         }
-                    }
-                }
-            }
-        }
-        [HarmonyPatch(typeof(Bullet_iceTrack))]
-        public static class Bullet_iceTrackPatch
-        {
-            [HarmonyPrefix]
-            [HarmonyPatch("HitZombie")]
-            public static bool PreHitZombie(Bullet_iceTrack __instance, Zombie zombie)
-            {
-                if (__instance.Damage == 120)
-                {
-                    zombie.SetCold(8, 1);
-                    zombie.AddfreezeLevel(15);
-                    var pos = __instance.transform.position;
-                    var bulletRow = Mouse.Instance.GetRowFromY(pos.x, pos.y);
-                    var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y), 1.6f);
-                    ParticleManager.Instance.SetParticle(ParticleType.IceBallExplode, new(pos.x, pos.y));
-                    for (int i=0; i<8; i++)
-                    {
-                        Bullet bullet = CreateBullet.Instance.SetBullet(pos.x, pos.y, bulletRow, BulletType.Bullet_iceSpark, BulletMoveWay.Free);
-                        bullet.transform.Rotate(0, 0, i * 45);
-                        bullet.penetrationTimes = 3;
-                        bullet.Damage = 80;
-                    }
-                    foreach (var z in array)
-                    {
-                        if (z != null && z.gameObject.TryGetComponent<Zombie>(out var otherZ) && (otherZ.theZombieRow == bulletRow || otherZ.theZombieRow == bulletRow + 1 || otherZ.theZombieRow == bulletRow - 1))
-                        {
-                            otherZ.TakeDamage(DmgType.IceAll, 200);
-                            otherZ.SetCold(8, 1);
-                            otherZ.AddfreezeLevel(5);
-                        }
-                    }
-                }
-                return true;
-            }
-        }
-        [HarmonyPatch(typeof(Bullet_iceSpark))]
-        public static class Bullet_iceSparkPatch
-        {
-            [HarmonyPrefix]
-            [HarmonyPatch("HitZombie")]
-            public static bool PreHitZombie(Bullet_iceSpark __instance, Zombie zombie)
-            {
-                if (__instance.Damage == 80 && __instance.theMovingWay == (int)BulletMoveWay.Free)
-                {
-                    var pos = __instance.transform.position;
-                    var bulletRow = Mouse.Instance.GetRowFromY(pos.x, pos.y);
-                    if (Lawnf.TravelAdvanced(SuperIceCattail.buff2) && (new System.Random()).Next(1, 100) <= 37)
-                    {
-                        for (int i = 0; i < 4; i++)
-                        {
-                            Bullet bullet = CreateBullet.Instance.SetBullet(pos.x, pos.y, bulletRow, BulletType.Bullet_iceSpark, BulletMoveWay.Free);
-                            bullet.transform.Rotate(0, 0, i * 90);
-                            bullet.penetrationTimes = 3;
-                            bullet.Damage = 30;
-                        }
-                    }
-                }
-                return true;
-            }
-        }
-        [HarmonyPatch(typeof(Bullet_fireTrack))]
-        public static class Bullet_fireTrackPatch
-        {
-            [HarmonyPrefix]
-            [HarmonyPatch("HitZombie")]
-            public static bool PreHitZombie(Bullet_fireTrack __instance, Zombie zombie)
-            {
-                if (__instance.Damage == 180)
-                {
-                    if (Lawnf.TravelAdvanced(SuperFireCattail.buff2)) zombie.TakeDamage(DmgType.NormalAll, __instance.Damage * 4);
-                    zombie.SetJalaed();
-                    var pos = __instance.transform.position;
-                    var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y), 1.6f);
-                    var bulletRow = Mouse.Instance.GetRowFromY(pos.x, pos.y);
-                    ParticleManager.Instance.SetParticle(ParticleType.JalaedCloudSmall, new(pos.x, pos.y));
-                    if (Lawnf.TravelAdvanced(SuperFireCattail.buff1) && (new System.Random()).Next(1, 20) == 1)
-                    {
-                        MelonCoroutines.Start(Plugin.FireOcean(new(pos.x, pos.y)));
-                    }
-                    for (int i = 0; i < 8; i++)
-                    {
-                        Bullet bullet = CreateBullet.Instance.SetBullet(pos.x, pos.y, bulletRow, BulletType.Bullet_fireTrack, BulletMoveWay.Free);
-                        bullet.transform.Rotate(0, 0, i * 45);
-                        bullet.penetrationTimes = 10;
-                        bullet.Damage = 120;
-                    }
-                    foreach (var z in array)
-                    {
-                        if (z != null && z.gameObject.TryGetComponent<Zombie>(out var otherZ) && (otherZ.theZombieRow == bulletRow || otherZ.theZombieRow == bulletRow + 1 || otherZ.theZombieRow == bulletRow - 1))
-                        {
-                            if (otherZ.isJalaed) otherZ.TakeDamage(DmgType.NormalAll, 300);
-                            otherZ.SetJalaed();
-                        }
-                    }
-                }
-                else if (__instance.Damage == 120 && __instance.theMovingWay == (int)BulletMoveWay.Free)
-                {
-                    return true;
-                }
-                return false;
-            }
-        }
-        [HarmonyPatch(typeof(Bullet_iceBlock_big))]
-        public static class Bullet_iceBlock_bigPatch
-        {
-            [HarmonyPostfix]
-            [HarmonyPatch("HitZombie")]
-            public static void PostHitZombie(Bullet_iceBlock_big __instance, Zombie zombie)
-            {
-                if (__instance.Damage == 360)
-                {
-                    zombie.SetFreeze(12, 1);
-                    var pos = __instance.transform.position;
-                    var bulletRow = Mouse.Instance.GetRowFromY(pos.x, pos.y);
-                    Board.Instance.CreateCherryExplode(new(pos.x, pos.y), bulletRow, CherryBombType.IceCharry, 900);
-                }
-            }
-        }
-        [HarmonyPatch(typeof(Plant))]
-        public static class PlantPatch
-        {
-            [HarmonyPrefix]
-            [HarmonyPatch("TakeDamage")]
-            public static void PreTakeDamage(Plant __instance)
-            {
-                if (__instance.thePlantType == (PlantType)818)
-                {
-                    var pos = __instance.transform.position;
-                    var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .3f), 1f);
-                    foreach (var z in array)
-                    {
-                        if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie) && zombie.theZombieRow == __instance.thePlantRow)
-                        {
-                            if (TypeMgr.UltimateZombie(zombie.theZombieType) == false)
-                            {
-                                __instance.Die(Plant.DieReason.BySelf);
-                                zombie.DestoryZombie();
-                                CreateZombie.Instance.SetZombieWithMindControl(zombie.theZombieRow, ZombieType.JalapenoZombie, zombie.transform.position.x);
-                                break;
-                            }
-                        }
+                        zombie.Garliced();
                     }
                 }
             }
         }
     }
-    [HarmonyPatch(typeof(InitBoard))]
-    public static class InitBoardPatch
+    /*[HarmonyPatch(typeof(LaserUmbrella))]
+    public static class LaserUmbrellaPatch
     {
         [HarmonyPostfix]
-        [HarmonyPatch("RightMoveCamera")]
-        public static void PostEnterGame(InitBoard __instance)
+        [HarmonyPatch("Connected")]
+        public static void PostConnect(LaserUmbrella __instance, Plant plant)
         {
-            Plugin.newCard(820);
-            Plugin.newCard(835);
+            if (__instance.lightBall is not null)
+            {
+                Plugin.printString(__instance.lightBall.name);
+                Plugin.printString(__instance.lightBall.transform.parent.name);
+            }
+        }
+    }*/
+    [HarmonyPatch(typeof(Bullet_cabbage))]
+    public static class Bullet_cabbagePatch
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch("HitZombie")]
+        public static void PostHitZombie(Bullet_cabbage __instance, Zombie zombie)
+        {
+            if (__instance.Damage == 60)
+            {
+                var pos = __instance.transform.position;
+                var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .2f), .4f);
+                foreach (var z in array)
+                {
+                    if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var ozom) && ozom.theZombieRow == __instance.theBulletRow)
+                    {
+                        if (ozom.isJalaed is true)
+                        {
+                            ozom.JalaedExplode(false, 20);
+                        }
+                        ozom.SetJalaed();
+                    }
+                }
+            }
         }
     }
     [HarmonyPatch(typeof(Plant))]
     public static class PlantPatch
     {
-        [HarmonyPostfix]
+        [HarmonyPrefix]
         [HarmonyPatch("TakeDamage")]
-        public static void PostTakeDamage(Plant __instance)
+        public static void PreTakeDamage(Plant __instance)
         {
-            if (__instance.thePlantType == (PlantType)820)
+            if (__instance.thePlantType == (PlantType)818)
             {
-                var scream = __instance.gameObject.GetComponent<Shrine>();
-                if (scream != null)
+                var pos = __instance.transform.position;
+                var array = Physics2D.OverlapCircleAll(new(pos.x, pos.y + .3f), 1f);
+                foreach (var z in array)
                 {
-                    scream.screamLength = 1f;
-                }
-            }
-        }
-    }
-    [HarmonyPatch(typeof(StarFruit))]
-    public static class StarFruitPatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("Shoot1")]
-        public static bool PreShoot1(StarFruit __instance)
-        {
-            if (__instance.thePlantType == (PlantType)837)
-            {
-                return false;
-            }
-            return true;
-        }
-    }
-    [HarmonyPatch(typeof(DoomBlover))]
-    public static class DoomBloverPatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("BlowEffect")]
-        public static void PreBlowEffect(DoomBlover __instance)
-        {
-            //Do more damage
-            foreach (var zombie in Board.Instance.zombieArray)
-            {
-                if (zombie != null)
-                {
-                    zombie.AddEmberScore();
-                    zombie.TakeDamage(DmgType.NormalAll, 30 * zombie.GetEmberScore());
-                }
-            }
-        }
-    }
-    [HarmonyPatch(typeof(DoomFume))]
-    public static class DoomFumePatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("AnimShoot")]
-        public static void PreAnimShoot(DoomFume __instance)
-        {
-            //Do knockback and shorten cooldown
-            foreach (var zombie in Board.Instance.zombieArray)
-            {
-                if (zombie != null && zombie.theZombieRow == __instance.thePlantRow && zombie.transform.position.x>__instance.transform.position.x)
-                {
-                    zombie.AddEmberScore();
-                    zombie.KnockBack(math.clamp(0.5f * zombie.GetEmberScore(), 0.5f, 6f));
-                }
-            }
-        }
-    }
-    [HarmonyPatch(typeof(DoomChomper))]
-    public static class DoomChomperPatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("Chomp")]
-        public static void PreChomp(DoomChomper __instance, Zombie zombie)
-        {
-            //Shorten Chew Time
-            zombie.SetEmbered();
-            __instance.swallowMaxCountDown = math.clamp(30 - zombie.GetEmberScore() * 5, 5, 30);
-        }
-    }
-    [HarmonyPatch(typeof(Bullet_doom))]
-    public static class Bullet_doomPatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("HitZombie")]
-        public static void PreHitZombie(Bullet_doom __instance, Zombie zombie)
-        {
-            //Increase contact damage
-            if (__instance.theBulletType == BulletType.Bullet_pea_doom)
-            {
-                zombie.TakeDamage(DmgType.NormalAll, 5 * zombie.GetEmberScore());
-                zombie.AddEmberScore();
-                //var bullet = CreateBullet.Instance.SetBullet(__instance.transform.position.x, __instance.transform.position.y, __instance.theBulletRow + 1, BulletType.Bullet_seaStar, BulletMoveWay.MoveRight);
-                //Plugin.printString(bullet.ToString());
-            }
-            if (__instance.theBulletType == BulletType.Bullet_doom)
-            {
-                zombie.AddEmberScore();
-            }
-            if (__instance.theBulletType == BulletType.Bullet_doom_big)
-            {
-                zombie.AddEmberScore(5);
-            }
-        }
-    }
-    [HarmonyPatch(typeof(Bullet_seaStar))]
-    public static class Bullet_seaStarPatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("HitZombie")]
-        public static void PreHitZombie(Bullet_seaStar __instance, Zombie zombie)
-        {
-            if (__instance.theBulletType == BulletType.Bullet_seaStar)
-            {
-                zombie.AddEmberScore();
-            }
-        }
-    }
-    [HarmonyPatch(typeof(Bullet_blackPuff))]
-    public static class Bullet_blackPuffPatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("HitZombie")]
-        public static void PreHitZombie(Bullet_blackPuff __instance, Zombie zombie)
-        {
-            //Cause a small explosion
-            if (__instance.theBulletType == BulletType.Bullet_blackPuff)
-            {
-                if (zombie.GetEmberScore() > 5)
-                {
-                    ParticleManager.Instance.SetParticle(ParticleType.DoomSplat, zombie.transform.position + UnityEngine.Vector3.up * 2f);
-                    var reqDistance = math.clamp(0.3 * zombie.GetEmberScore(), 0.5, 2.5);
-                    foreach (Zombie otZombie in Board.Instance.zombieArray)
+                    if (z is not null && z.gameObject.TryGetComponent<Zombie>(out var zombie) && zombie.theZombieRow == __instance.thePlantRow)
                     {
-                        if (otZombie != null)
+                        if (TypeMgr.UltimateZombie(zombie.theZombieType) == false)
                         {
-                            var distance = (otZombie.transform.position + UnityEngine.Vector3.up * 2f - (__instance.transform.position - UnityEngine.Vector3.down*0.5f)).magnitude;
-                            if (distance <= reqDistance)
+                            __instance.Die(Plant.DieReason.BySelf);
+                            zombie.DestoryZombie();
+                            CreateZombie.Instance.SetZombieWithMindControl(zombie.theZombieRow, ZombieType.JalapenoZombie, zombie.transform.position.x);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    [HarmonyPatch(typeof(SeedLibrary))]
+    public static class SeedLibraryPatch
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch("Start")]
+        public static void PostStart(SeedLibrary __instance)
+        {
+            Plugin.newCard(820);
+            Plugin.newCard(835);
+            Plugin.newCard(842);
+        }
+    }
+
+    [HarmonyPatch(typeof(InitBoard))]
+    public static class InitBoardPatch
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch("ReadySetPlant")]
+        public static void PostReadySetPlant(InitBoard __instance)
+        {
+            if (GameAPP.theBoardLevel == Plugin.BossRushLevelID)
+            {
+                Plugin.printString("Boss Rush Initialized");
+                MelonCoroutines.Start(Plugin.instance.InitializeBossRush());
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(ConveyManager))]
+    public static class ConveyManagerPatch
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch("GetCardPool")]
+        public static void PostGetCardPool(ref Il2CppSystem.Collections.Generic.List<PlantType> __result)
+        {
+            CustomLevelData customLevelData;
+            if (Utils.IsCustomLevel(out customLevelData) && customLevelData.BoardTag.isConvey)
+            {
+                if (GameAPP.theBoardLevel == Plugin.BossRushLevelID)
+                {
+                    if (Plugin.instance.CurrentBossRushStage == BossRushStage.Normal)
+                    {
+                        __result = Plugin.BossRushSet1.ToIl2CppList<PlantType>();
+                    }
+                    else
+                    {
+                        __result = Plugin.BossRushSet2.ToIl2CppList<PlantType>();
+                    }
+                }
+                else
+                {
+                    __result = customLevelData.ConveyBeltPlantTypes().ToIl2CppList<PlantType>();
+                }
+            }
+        }
+    }
+    /*[HarmonyPatch(typeof(UIMgr))]
+    public static class UIMgrPatch
+    {
+        [HarmonyPostfix]
+        [HarmonyPatch("EnterChallengeMenu")]
+        [HarmonyPriority(800)]
+        public static void PostEnterChallengeMenu(UIMgr __instance)
+        {
+            Transform transform = GameAPP.canvas.GetChild(0).FindChild("Levels");
+            Transform transform2 = transform.FindChild("PageCustomLevel");
+            foreach (Transform @object in transform.GetComponentsInChildren<Transform>(true))
+            {
+                if (@object.name.Contains("Page"))
+                {
+                    Plugin.printString(@object.name);
+                }
+            }
+            if (transform2)
+            {
+                Transform transform3 = transform2.FindChild("Pages");
+                foreach (Transform transform4 in transform3.GetComponentInChildren<Transform>(true))
+                {
+                    if (transform4.GetChildCount() >= 2)
+                    {
+                        Image image;
+                        Advanture_Btn button;
+                        if (transform4.GetChild(0).TryGetComponent<Image>(out image) && transform4.GetChild(1).TryGetComponent<Advanture_Btn>(out button))
+                        {
+                            if (button.buttonNumber == Plugin.BossRushLevelID)
                             {
-                                otZombie.TakeDamage(DmgType.NormalAll, 20+math.clamp(5 * zombie.GetEmberScore(), 5, 30));
+                                image.transform.localScale = new(1, 1, 1);
                             }
                         }
                     }
                 }
-                zombie.AddEmberScore();
             }
         }
-    }
-    [HarmonyPatch(typeof(Bullet_doomCactus))]
-    public static class Bullet_doomCactusPatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("HitZombie")]
-        public static void PreHitZombie(Bullet_doomCactus __instance, Zombie zombie)
-        {
-            //Increase ember points
-            if (__instance.theBulletType == BulletType.Bullet_doomCactus)
-            {
-                zombie.AddEmberScore();
-            }
-        }
-    }
-    [HarmonyPatch(typeof(Bullet_iceDoom))]
-    public static class Bullet_iceDoomPatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("HitZombie")]
-        public static void PreHitZombie(Bullet_iceDoom __instance, Zombie zombie)
-        {
-            //Increase ember points
-            if (__instance.theBulletType == BulletType.Bullet_iceDoom && __instance.hitTimes < 2)
-            {
-                __instance.penetrationTimes = math.clamp(__instance.penetrationTimes + zombie.GetEmberScore(), 3, 7);
-            }
-        }
-    }
-    [HarmonyPatch(typeof(UltimateFume))]
-    public static class UltimateFumePatch
-    {
-        [HarmonyPrefix]
-        [HarmonyPatch("AttackZombie")]
-        public static void PreAttackZombie(UltimateFume __instance)
-        {
-            //Knockback
-            foreach (var z in Board.Instance.zombieArray)
-            {
-                if (z != null && !z.isMindControlled && !TypeMgr.IsAirZombie(z.theZombieType) && z.theZombieRow == __instance.thePlantRow && z.transform.position.x > __instance.transform.position.x)
-                {
-                    z.KnockBack(math.clamp(0.025f * (z.GetEmberScore() - 5), 0.025f, 0.1f), Zombie.KnockBackReason.ByIronPea);
-                    z.AddEmberScore();
-                }
-            }
-        }
-    }
+    }*/
 }

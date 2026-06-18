@@ -10,7 +10,7 @@ using HarmonyLib;
 using CustomizeLib;
 using Unity.Profiling;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class DoomSeaThorn : MonoBehaviour

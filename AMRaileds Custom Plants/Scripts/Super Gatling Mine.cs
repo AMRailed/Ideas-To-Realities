@@ -11,7 +11,7 @@ using CustomizeLib;
 using System.Runtime.CompilerServices;
 using System.Numerics;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class SuperGatlingMine : MonoBehaviour

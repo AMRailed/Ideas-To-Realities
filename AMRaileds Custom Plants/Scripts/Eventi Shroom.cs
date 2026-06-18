@@ -4,7 +4,7 @@ using UnityEngine;
 using HarmonyLib;
 using Il2CppInterop.Runtime.Injection;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [HarmonyPatch(typeof(Bullet_doom))]
     public static class DoomBulletPatch

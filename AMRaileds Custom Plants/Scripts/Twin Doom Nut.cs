@@ -10,7 +10,7 @@ using HarmonyLib;
 using CustomizeLib;
 using Unity.Mathematics;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     public class TwinDoomNut : MonoBehaviour
@@ -29,7 +29,6 @@ namespace AMRaileds_Custom_Plants
         {
             var pTag = new Plant.PlantTag();
             pTag.nutPlant = true;
-            pTag.flyingPlant = true;
             plant.plantTag = pTag;
         }
         public void Update()
@@ -39,12 +38,19 @@ namespace AMRaileds_Custom_Plants
             {
                 HealCountdown = HealInterval;
                 int embered = 0;
+                var reqDistance = 1.9f;
+
+                if (Lawnf.TravelAdvanced(TwinDoomNut.buff1))
+                {
+                    reqDistance = 3.6f;
+                }
+
                 foreach (Zombie zombie in Board.Instance.zombieArray)
                 {
                     if (zombie != null)
                     {
                         var distance = (zombie.transform.position + Vector3.up * 1.5f - this.transform.position).magnitude;
-                        if (distance <= 2.5f)
+                        if (distance <= reqDistance)
                         {
                             if (zombie.isEmbered) embered++;
                             zombie.TakeDamage(DmgType.NormalAll, 30 * zombie.GetEmberScore());
@@ -54,7 +60,24 @@ namespace AMRaileds_Custom_Plants
                         }
                     }
                 }
-                plant.Recover(400 + (embered * 20));
+                plant.Recover(200 + (embered * 20));
+            }
+        }
+
+        public static int buff1 = -1;
+        public static int buff2 = -1;
+    }
+
+    [HarmonyPatch(typeof(Plant))]
+    public static class TwinDoomNutDamagePatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPatch("TakeDamage")]
+        public static void PreTakeDamage(Plant __instance, ref int damage)
+        {
+            if (__instance.thePlantType == (PlantType)838)
+            {
+                damage = math.min(damage, 50);
             }
         }
     }

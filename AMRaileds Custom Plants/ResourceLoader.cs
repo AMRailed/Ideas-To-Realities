@@ -1,4 +1,5 @@
 ﻿using Il2Cpp;
+using Il2CppSystem.IO;
 using MelonLoader;
 using System;
 using System.Collections.Generic;
@@ -10,14 +11,16 @@ using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace AMRaileds_Custom_Plants.Scripts
+namespace IdeasCustom.Scripts
 {
     public class ResourceLoader
     {
         public static AssetBundle LoadBundleFromEmbedded(string path)
         {
+            Plugin.printString("Loading "+path);
+
             Assembly assembly = Assembly.GetExecutingAssembly();
-            Stream stream = assembly.GetManifestResourceStream(path);
+            System.IO.Stream stream = assembly.GetManifestResourceStream(path);
 
             if (stream == null)
             {
@@ -26,13 +29,47 @@ namespace AMRaileds_Custom_Plants.Scripts
 
             byte[] buffer = new byte[stream.Length];
             stream.Read(buffer, 0, buffer.Length);
+            stream.Dispose();
 
             AssetBundleCreateRequest request = AssetBundle.LoadFromMemoryAsync(buffer);
             AssetBundle bundle = request.assetBundle;
 
             if (bundle != null)
             {
+                Plugin.printString("Successfully loaded " + path);
                 return bundle;
+            }
+
+            return null;
+        }
+        public static Sprite LoadSpriteFromEmbedded(string path, int pixelPerUnit = 100)
+        {
+            Plugin.printString("Loading " + path);
+
+            Assembly assembly = Assembly.GetExecutingAssembly();
+            System.IO.Stream stream = assembly.GetManifestResourceStream(path);
+
+            if (stream == null)
+            {
+                return null;
+            }
+
+            byte[] buffer = new byte[stream.Length];
+            stream.Read(buffer, 0, buffer.Length);
+            stream.Dispose();
+
+            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            UnityEngine.ImageConversion.LoadImage(tex, buffer);
+
+            if (tex)
+            {
+                Plugin.printString("Successfully loaded " + path);
+                return Sprite.Create(
+                    tex,
+                    new Rect(0, 0, tex.width, tex.height),
+                    new Vector2(0.5f, 0.5f),
+                    pixelPerUnit
+                );
             }
 
             return null;
@@ -47,6 +84,7 @@ namespace AMRaileds_Custom_Plants.Scripts
                 {
                     if (testObj.name == name)
                     {
+                        Plugin.printString("Successfully loaded asset from bundle with the name of " + name);
                         return testObj;
                     }
                 }

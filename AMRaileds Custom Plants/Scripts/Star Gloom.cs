@@ -2,7 +2,7 @@
 using MelonLoader;
 using UnityEngine;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     public class StarGloom : MonoBehaviour
@@ -20,7 +20,7 @@ namespace AMRaileds_Custom_Plants
         public void AnimShoot()
         {
             var centerPos = plant.center.transform.position;
-            ParticleManager.Instance.SetParticle((ParticleType)119, plant.center.transform.position);
+            ParticleManager.Instance.SetParticle((ParticleType)200, plant.center.transform.position);
 
             for (int i = 0; i < 8; i++)
             {

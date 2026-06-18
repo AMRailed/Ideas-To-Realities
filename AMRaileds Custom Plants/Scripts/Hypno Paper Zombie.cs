@@ -9,7 +9,7 @@ using Il2Cpp;
 using HarmonyLib;
 using CustomizeLib;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     internal class HypnoPaperZombie : MonoBehaviour
@@ -35,6 +35,7 @@ namespace AMRaileds_Custom_Plants
         {
             this.zombie.theSecondArmor = this.transform.Find("Zombie_paper_paper1").gameObject;
             this.zombie.theSecondArmorType = Zombie.SecondArmorType.Paper;
+            this.zombie.revived = true;
         }
 
         public void Update()

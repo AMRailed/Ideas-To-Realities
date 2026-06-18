@@ -11,7 +11,7 @@ using CustomizeLib;
 using static MelonLoader.MelonLogger;
 using JetBrains.Annotations;
 
-namespace AMRaileds_Custom_Plants
+namespace IdeasCustom
 {
     [RegisterTypeInIl2Cpp]
     public class DoomFlower : MonoBehaviour
